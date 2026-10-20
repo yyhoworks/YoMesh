@@ -10,6 +10,8 @@ import base64
 import shutil
 import sys
 import tempfile
+import threading
+import time
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
@@ -25,7 +27,7 @@ from test_native_configuration import fixture
 from yomesh.server import handler_for
 
 
-def main(port=8769):
+def main(port=8769, *, dynamic_after_pull=False):
     with tempfile.TemporaryDirectory(prefix="yomesh-device-ui-") as folder:
         root = Path(folder)
         shutil.copytree(ROOT / "web", root / "web")
@@ -42,6 +44,8 @@ def main(port=8769):
         files = {"mihomo.yaml": yaml.safe_dump(main_config, allow_unicode=True).encode(),
                  **{name: text.encode() for name, text in native["documents"].items()},
                  **{name: base64.b64decode(text) for name, text in native["assets"].items()}}
+        if dynamic_after_pull:
+            files["localdns/generated/qa.txt"] = b"before\n"
         server = ThreadingHTTPServer(("127.0.0.1", port), handler_for(root, port))
         handler = server.RequestHandlerClass
         handler.device_management.registry.transport = ReadOnlyTransport(files)
@@ -56,6 +60,12 @@ def main(port=8769):
             "localdns_binary": "/opt/localdns/localdns", "manager": "openrc",
             "services": {"mihomo": "mihomo", "localdns": "localdns"},
             "capabilities": [], "last_read": None})
+        if dynamic_after_pull:
+            def refresh_generated():
+                while handler.device_management.registry.device(ident).get("baseline") is None:
+                    time.sleep(0.1)
+                handler.device_management.registry.transport.files["localdns/generated/qa.txt"] = b"after\n"
+            threading.Thread(target=refresh_generated, daemon=True).start()
         print(f"Synthetic YoMesh fixture: http://127.0.0.1:{port}/#spaces", flush=True)
         print("Login: fixture / fixture-password", flush=True)
         try:
@@ -70,4 +80,6 @@ def main(port=8769):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8769)
-    main(parser.parse_args().port)
+    parser.add_argument("--dynamic-after-pull", action="store_true")
+    args = parser.parse_args()
+    main(args.port, dynamic_after_pull=args.dynamic_after_pull)

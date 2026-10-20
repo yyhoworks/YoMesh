@@ -102,6 +102,21 @@ def _source_profile(result, home):
     return checked(native)
 
 
+def _native_layers(native):
+    """Separate publish-managed configuration from self-updating DNS tables."""
+    if native is None:
+        return None, {}
+    managed = dict(native)
+    generated = {}
+    for section in ('documents', 'assets'):
+        values = native.get(section, {})
+        managed[section] = {name: body for name, body in values.items()
+                            if not name.startswith('localdns/generated/')}
+        generated.update({name: body for name, body in values.items()
+                          if name.startswith('localdns/generated/')})
+    return managed, generated
+
+
 class DeviceManagement:
     def __init__(self, root: Path, spaces, registry: DeviceRegistry | None = None):
         self.root, self.spaces = Path(root), spaces
@@ -163,13 +178,21 @@ class DeviceManagement:
         native = _source_profile(result, row['mihomo_home'])
         snapshot = self.spaces.workspace_snapshot(row['space_id']) if row.get('space_id') else None
         current = snapshot['profile'].get('native_configuration') if snapshot else None
+        managed_native, generated_native = _native_layers(native)
+        managed_current, generated_current = _native_layers(current)
+        generated_changes = sum(generated_current.get(name) != generated_native.get(name)
+                                for name in generated_current.keys() | generated_native.keys()) if current else 0
         return {'device': self.registry._public(row), 'remote_digest': _digest(result['manifest']),
                 'remote_manifest': result['manifest'], 'refs': refs,
                 'workspace_revision': snapshot['revision'] if snapshot else None,
                 'local_changed_since_pull': bool(current and (not row.get('baseline_digest') or _digest(current) != row['baseline_digest'])),
-                'different': current != native,
+                'different': managed_current != managed_native,
+                'runtime_generated_changed': generated_changes > 0,
+                'runtime_generated_changed_files': generated_changes,
                 'counts': {'files': len(result['files']), 'policies': len(native['policies']),
-                           'proxy_groups': len(native['mihomo'].get('proxy-groups', []))},
+                           'proxy_groups': len(native['mihomo'].get('proxy-groups', [])),
+                           'managed_files': len(result['manifest']),
+                           'runtime_generated_files': len(generated_native)},
                 '_native': native}
 
     def preview_pull(self, ident):

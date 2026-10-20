@@ -20,7 +20,7 @@ python3 device_installer.py target.json device.pub
 
 安装器要求 root，仅在检查通过后修改 `/root/.ssh/authorized_keys`、`/etc/yomesh-executor/target.json` 和 `/usr/local/lib/yomesh-executor/runner.py`，旧文件备份在 `target.json` 指定的 `state_dir/installer-backups/` 下。`target.json` 固定工作目录、主文件、二进制、服务名和状态目录；每次 SSH 请求不能改这些路径。目标若需 `LD_PRELOAD` 等原生校验环境，使用表单“校验程序所需环境变量”生成 `validation_env`，只填固定路径，不填密码。安装后点击工作台“检查连接”，再“读取并比对”。
 
-新增引用文件若已在设备上存在、却未进入上次读取基准，发布会拒绝覆盖。删除的旧文件会先备份，回滚时恢复。设备上的运行态动态表不作为发布冲突基准；若它们影响效果，需要另外做实网对照。
+新增引用文件若已在设备上存在、却未进入上次读取基准，发布会拒绝覆盖。删除的旧文件会先备份，回滚时恢复。读取预览分别显示参与发布比对的文件和 LocalDNS `generated/` 运行态表；自动刷新只改变后者时，受管配置仍显示一致，可按需更新工作台快照。运行态动态表不作为发布冲突基准；若它们影响效果，需要另外做实网对照。
 
 ## Hermes MCP 配置
 

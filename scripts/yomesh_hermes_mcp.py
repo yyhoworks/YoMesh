@@ -118,7 +118,7 @@ def serve(base, token):
                 if version not in {"2025-03-26", "2025-06-18", "2026-07-28"}:
                     version = "2025-03-26"
                 respond(ident, result={"protocolVersion": version, "capabilities": {"tools": {}},
-                                       "serverInfo": {"name": "yomesh", "version": "0.16.1"}})
+                                       "serverInfo": {"name": "yomesh", "version": "0.16.2"}})
             elif method == "ping":
                 respond(ident, result={})
             elif method == "tools/list":

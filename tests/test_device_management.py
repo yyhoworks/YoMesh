@@ -136,6 +136,26 @@ class DeviceReadTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "设备配置已变化"):
             self.manager.plan(self.ident, changed["revision"])
 
+    def test_generated_dns_tables_are_reported_separately_from_managed_config(self):
+        initial = self.manager.preview_pull(self.ident)
+        space_id = self.manager.pull(self.ident, initial["remote_digest"])["space_id"]
+        self.transport.files["localdns/generated/realip.txt"] = b"192.0.2.42\n"
+
+        preview = self.manager.preview_pull(self.ident)
+        self.assertFalse(preview["different"])
+        self.assertTrue(preview["runtime_generated_changed"])
+        self.assertEqual(preview["runtime_generated_changed_files"], 1)
+        self.assertEqual(preview["counts"]["runtime_generated_files"], 1)
+        self.assertEqual(preview["remote_digest"], initial["remote_digest"])
+        self.assertNotIn("localdns/generated/realip.txt", preview["remote_manifest"])
+        with self.assertRaisesRegex(ConfigError, "无需发布"):
+            self.manager.plan(self.ident, self.spaces.workspace_snapshot(space_id)["revision"])
+
+        self.manager.pull(self.ident, preview["remote_digest"], preview["workspace_revision"])
+        repeated = self.manager.preview_pull(self.ident)
+        self.assertFalse(repeated["different"])
+        self.assertFalse(repeated["runtime_generated_changed"])
+
     def test_binding_existing_space_requires_explicit_overwrite_on_first_pull(self):
         catalog = self.spaces.snapshot()
         imported = self.spaces.import_native(fixture(), "已有原生空间", catalog["revision"])

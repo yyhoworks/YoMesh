@@ -1,6 +1,6 @@
 # YoMesh
 
-代理配置工作台，以同一份 Profile 管理 Mihomo / sing-box 代理配置与独立 DNS。当前版本 **0.16.1**，界面主要使用中文。
+代理配置工作台，以同一份 Profile 管理 Mihomo / sing-box 代理配置与独立 DNS。当前版本 **0.16.2**，界面主要使用中文。
 
 ## 功能
 
@@ -70,7 +70,7 @@ python scripts/yomesh.py export examples/profile.json --component dns --output o
 python -m unittest discover -s tests -v
 ```
 
-项目已有 253 项测试，覆盖原生加载、规则语义、隔离 DNS 查询、HTTP API、认证与独立登录页、迁移报告、原生 DNS 优先级、无损导出、设备同步与回滚。Linux 执行器测试在 Windows 上明确跳过；可选 LocalDNS 测试在程序未安装或平台不支持时也明确跳过。内核加载与本机测试不代表真实订阅、外部节点、设备接管或上游连通性已验证。
+项目已有 254 项测试，覆盖原生加载、规则语义、隔离 DNS 查询、HTTP API、认证与独立登录页、迁移报告、原生 DNS 优先级、无损导出、设备同步与回滚。Linux 执行器测试在 Windows 上明确跳过；可选 LocalDNS 测试在程序未安装或平台不支持时也明确跳过。内核加载与本机测试不代表真实订阅、外部节点、设备接管或上游连通性已验证。
 
 设备同步须先启用工作台密码保护，并在每台目标设备上安装受限执行器；不会在安装 YoMesh 后自动连接任何人的服务器。复制安装、Hermes 接入、发布及恢复步骤见 [指定服务器同步](docs/device-sync.md)。
 
