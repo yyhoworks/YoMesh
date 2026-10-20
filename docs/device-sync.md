@@ -35,10 +35,15 @@ python3 device_installer.py target.json device.pub
 ```yaml
 mcp_servers:
   yomesh:
-    command: "python3 /root/.local/share/yomesh/yomesh_hermes_mcp.py --config /root/.config/yomesh/hermes.json"
+    command: "python3"
+    args:
+      - /root/.local/share/yomesh/yomesh_hermes_mcp.py
+      - --config
+      - /root/.config/yomesh/hermes.json
+    enabled: true
 ```
 
-桥只接受 HTTPS 地址；仅 `127.0.0.1` / `localhost` 的隔离测试允许 HTTP。Hermes 上不需要设备 SSH 密钥；它只连接 YoMesh 的管理地址。轮换或撤销令牌后，旧桥会立即失效。不要让 Hermes 的聊天输出、日志或模型上下文显示令牌。
+Hermes 的 `command` 必须是可执行文件，脚本和参数放在 `args` 中；配置后可运行 `hermes mcp test yomesh` 验证工具发现。桥只接受 HTTPS 地址；仅 `127.0.0.1` / `localhost` 的隔离测试允许 HTTP。Hermes 上不需要设备 SSH 密钥；它只连接 YoMesh 的管理地址。轮换或撤销令牌后，旧桥会立即失效。不要让 Hermes 的聊天输出、日志或模型上下文显示令牌。
 
 ## 验收边界与恢复
 
