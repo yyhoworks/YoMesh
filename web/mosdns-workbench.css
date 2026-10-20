@@ -1,0 +1,26 @@
+.mosdns-tabs { margin-bottom:20px; display:flex; gap:8px; flex-wrap:wrap; }
+.mosdns-sections { display:grid; gap:20px; min-width:0; }
+.mosdns-section { padding:24px; min-width:0; }
+.mosdns-section h2 { margin:0 0 16px; font-size:14px; }
+.mosdns-section .fields { margin-bottom:16px; }
+.mosdns-section textarea { width:100%; resize:vertical; min-height:100px; }
+.mosdns-upstream { margin:16px 0; padding:16px; border:1px solid var(--line); border-radius:8px; min-width:0; }
+.mosdns-upstream legend { padding:0 8px; color:var(--muted); }
+.mosdns-rule { border-top:1px solid var(--line); padding:16px 0; }
+.mosdns-rule summary { cursor:pointer; margin-bottom:16px; overflow-wrap:anywhere; }
+.mosdns-rule>details { margin:16px 0; }
+.mosdns-actions { position:sticky; bottom:12px; margin-top:20px; padding:16px; background:var(--solid); z-index:2; }
+.mosdns-actions p { margin:0 0 8px; }
+.mosdns-actions .error-message:empty { display:none; }
+.mosdns-code { font-family:Consolas,monospace; font-size:12px; tab-size:2; }
+.mosdns-section hr { border:0; border-top:1px solid var(--line); margin:24px 0; }
+@media(max-width:700px) {
+ .mosdns-section { padding:16px; }
+ .mosdns-tabs { flex-wrap:nowrap; overflow-x:auto; padding-bottom:4px; }
+ .mosdns-tabs button { flex-shrink:0; }
+ .mosdns-actions { bottom:8px; }
+ .mosdns-code { font-size:16px; }
+ #mosdns-form input:not([type=checkbox]),#mosdns-form select,#mosdns-form textarea { font-size:16px; min-height:44px; }
+ .mosdns-section .check-row { min-height:44px; }
+ .mosdns-actions .filter-row { gap:8px; }
+}

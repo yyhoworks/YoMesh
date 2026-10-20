@@ -1,0 +1,8 @@
+{
+  "platform": "linux-amd64",
+  "version": "FJGAC",
+  "source": "Optional user-supplied compatible binary; not redistributed by this repository",
+  "sha256": "a4ad9e136f19d01bae2ecc1b1de80337f8f3e491db8e6254469003755d1d7a98",
+  "validation": "localdns --root PATH --config FILE --check",
+  "scope": "Existing LocalDNS native spaces only. Not a MosDNS replacement or a portable DNS translation."
+}

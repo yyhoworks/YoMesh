@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "name": "YoMesh compatibility fixture - replace with real nodes",
+  "sources": [{"id": "s1", "name": "示例订阅快照", "enabled": true}],
+  "nodes": [
+    {"id": "n1", "name": "示例 SS", "protocol": "shadowsocks", "server": "127.0.0.1", "port": 22001, "method": "aes-128-gcm", "password": "fixture-not-a-real-password", "source": "s1", "enabled": true, "region": "HK"},
+    {"id": "n2", "name": "示例 Trojan", "protocol": "trojan", "server": "127.0.0.1", "port": 22002, "password": "fixture-not-a-real-password", "tls": {"enabled": true, "server_name": "proxy.example.com", "insecure": false}, "source": "s1", "enabled": true},
+    {"id": "n3", "name": "示例 VMess WS", "protocol": "vmess", "server": "127.0.0.1", "port": 22003, "uuid": "f509506e-85d5-43ca-9d92-2cd061548837", "tls": {"enabled": true, "server_name": "proxy.example.com"}, "transport": {"type": "ws", "path": "/ws", "headers": {"Host": "proxy.example.com"}}, "source": "s1", "enabled": true},
+    {"id": "n4", "name": "示例 VLESS TLS", "protocol": "vless", "server": "127.0.0.1", "port": 22004, "uuid": "f509506e-85d5-43ca-9d92-2cd061548837", "tls": {"enabled": true, "server_name": "proxy.example.com"}, "source": "s1", "enabled": true},
+    {"id": "n5", "name": "示例 Hysteria2", "protocol": "hysteria2", "server": "127.0.0.1", "port": 22005, "password": "fixture-not-a-real-password", "tls": {"enabled": true, "server_name": "proxy.example.com"}, "source": "s1", "enabled": true}
+  ],
+  "groups": [
+    {"id": "g1", "name": "自动选择", "mode": "url-test", "sources": ["s1"], "nodes": [], "groups": [], "include": "", "exclude": "", "interval": 300},
+    {"id": "g2", "name": "默认代理", "mode": "select", "sources": [], "nodes": ["n1"], "groups": ["g1"], "include": "", "exclude": ""}
+  ],
+  "library": [
+    {"id": "l1", "name": "国内示例域名", "kind": "domain", "entries": ["+.qq.com", "+.bilibili.com"]},
+    {"id": "l2", "name": "广告示例域名", "kind": "domain", "entries": ["+.ads.example"]},
+    {"id": "l3", "name": "私有地址", "kind": "ipcidr", "entries": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"]}
+  ],
+  "policies": [
+    {"id": "p1", "name": "私网直连", "type": "RULE-SET", "value": "l3", "target": "DIRECT", "enabled": true},
+    {"id": "p2", "name": "广告拒绝", "type": "RULE-SET", "value": "l2", "target": "REJECT", "enabled": true},
+    {"id": "p3", "name": "国内直连", "type": "RULE-SET", "value": "l1", "target": "DIRECT", "enabled": true},
+    {"id": "p4", "name": "开发代理", "type": "DOMAIN-SUFFIX", "value": "github.com", "target": "g2", "enabled": true},
+    {"id": "p5", "name": "单域名代理", "type": "DOMAIN", "value": "api.example.com", "target": "n2", "enabled": true}
+  ],
+  "fallback": "g2",
+  "settings": {"mixed_port": 17890, "dns_port": 1053, "local_upstream": "223.5.5.5", "remote_upstream": "tcp://1.1.1.1", "bootstrap": "223.5.5.5", "dns_default": "remote"}
+}

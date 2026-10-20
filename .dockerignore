@@ -1,0 +1,17 @@
+.git
+work
+dist
+data
+backups
+.venv
+**/__pycache__
+**/*.pyc
+tools/cores
+*.zip
+*.tar
+*.tar.gz
+outputs
+prototypes
+.impeccable
+.env
+.env.*

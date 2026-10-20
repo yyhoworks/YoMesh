@@ -1,0 +1,9 @@
+{
+  "platform": "windows-amd64",
+  "checked_at": "2026-10-18",
+  "cores": {
+    "mihomo": {"version": "1.19.32", "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-windows-amd64-compatible-v1.19.32.zip", "sha256": "974a4d7ad69aed27aa2e8f91d61113573c14dadb14562c63e58effabf59816f0"},
+    "sing-box": {"version": "1.14.3", "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-windows-amd64.zip", "sha256": "d8b86ef58936dba9230ec6a57ffa4243933f3c14ef4809828b6c553440ed1518"},
+    "mosdns": {"version": "5.3.4", "url": "https://github.com/IrineSistiana/mosdns/releases/download/v5.3.4/mosdns-windows-amd64.zip", "sha256": "3d55b6647e632ad86a1d86e7cf21b96bb63adfde3b4ffdc098c9af79381638ca"}
+  }
+}

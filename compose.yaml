@@ -1,0 +1,28 @@
+services:
+  yomesh:
+    image: yomesh:0.15.0
+    build:
+      context: .
+    container_name: yomesh
+    restart: unless-stopped
+    ports:
+      - "${YOMESH_BIND_IP:-127.0.0.1}:${YOMESH_PORT:-8767}:8767"
+    command: ["python", "scripts/yomesh.py", "serve", "--host", "0.0.0.0", "--port", "8767", "--allowed-host", "${YOMESH_ALLOWED_HOST:-127.0.0.1:8767}"]
+    volumes:
+      - ./data:/app/data
+    read_only: true
+    environment:
+      MALLOC_ARENA_MAX: "2"
+      MALLOC_TRIM_THRESHOLD_: "262144"
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

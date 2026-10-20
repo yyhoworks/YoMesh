@@ -1,2 +1,74 @@
 # YoMesh
-代理配置工作台：统一 Profile，管理 Mihomo / sing-box 与独立 MosDNS。
+
+代理配置工作台，以同一份 Profile 管理 Mihomo / sing-box 代理配置与独立 MosDNS。当前版本 **0.15.0**，界面主要使用中文。
+
+## 功能
+
+- 按配置空间保存生成组合、入站、基础配置和 DNS；节点组、规则与分流策略由后端统一解析。
+- 管理节点订阅、手动节点、筛选、节点分组与实际内核测速。
+- 有序规则支持域名、IP、端口、订阅及 AND / OR 组合；关闭规则时跳过整条引用策略，保留完整条件。
+- 代理独立导出为 Mihomo YAML 或 sing-box JSON，支持内联、本地文件或远程规则。提供可停用的配置订阅链接。
+- MosDNS 支持多上游、逐上游 SOCKS、ECS、监听、分层缓存、TTL、有序域名 / 客户端规则、重写、主备回退与响应 IP 判定。
+- 域名和响应 IP 来源可按间隔刷新；失败保留上次有效快照。部署后的 MosDNS 使用导出包，刷新后需重新导出和部署。
+- 原生 Mihomo 空间保留未知字段与复杂规则，不擅自转换成 sing-box。可另存独立 MosDNS，也可保留已有 LocalDNS 原件。
+- 预览、校验与导出使用同一后端模型；下载前使用锁定版本的实际内核验证。
+
+## 本地运行（Windows）
+
+需要 Python 3.11+、PowerShell 和网络下载权限。
+
+```powershell
+python -m pip install -r requirements.txt
+./scripts/bootstrap-cores.ps1
+python scripts/yomesh.py serve --port 8767
+```
+
+打开 [本机工作台](http://127.0.0.1:8767)。请通过 HTTP 使用工作台，直接打开 HTML 文件不能连接持久化接口。
+
+默认只监听回环地址。需要其他设备访问时，显式设置监听与允许的 Host，并在账号设置中启用登录。真实订阅、节点凭据、证书和用户配置保存在被忽略的 `data/`，不要提交到仓库。
+
+## Docker / 群晖
+
+先下载并校验 Linux 内核，再构建镜像：
+
+```sh
+python scripts/prepare-linux-cores.py
+docker compose build
+mkdir -p data
+sudo chown 10001:10001 data
+docker compose up -d
+```
+
+Compose 默认发布到 `127.0.0.1:8767`，持久化目录为 `./data`。可将 [.env.example](.env.example) 复制为不提交的 `.env`，配置自己的监听地址、外部端口及允许的访问 Host。部署步骤和群晖权限说明见 [Docker 部署](docs/synology-docker.md)。
+
+镜像构建需要访问 Python 包源；三个官方内核由脚本按 SHA-256 校验。本仓库不分发 LocalDNS 程序或任何用户设备文件。LocalDNS 原生校验需要另行提供与版本锁匹配且有权使用的程序；缺少时不能导出对应的原生 DNS 包，普通 Mihomo / sing-box / MosDNS 功能不依赖它。
+
+## 命令行
+
+```sh
+python scripts/yomesh.py check examples/profile.json --proxy mihomo
+python scripts/yomesh.py export examples/profile.json --proxy mihomo --component proxy --output outputs/proxy
+python scripts/yomesh.py export examples/profile.json --component dns --output outputs/dns
+```
+
+`examples/profile.json` 是明确标注的本地兼容性样例，包含虚构测试节点与测试密码，不能用于连接外网。实际配置请在自己的工作区创建；导出目录必须不存在。
+
+## 兼容与验证
+
+| 内核 | 锁定版本 | 用途 |
+|---|---|---|
+| Mihomo | 1.19.32 | 代理、原生规则和节点组 |
+| sing-box | 1.14.3 | 可移植 Profile 的代理输出 |
+| MosDNS | 5.3.4 | 独立 DNS |
+
+```sh
+python -m unittest discover -s tests -v
+```
+
+项目已有 222 项测试，覆盖原生加载、规则语义、隔离 DNS 查询、HTTP API、持久化与回滚。可选 LocalDNS 的测试会在对应程序未安装或平台不支持时明确跳过。内核加载与本机测试不代表真实订阅、外部节点、设备接管或上游连通性已验证。
+
+更多说明：[兼容约定](docs/compatibility.md) · [架构](docs/architecture.md) · [规则工作台](docs/rule-workbench.md) · [MosDNS 能力边界](docs/mosdns-localdns-gap-analysis.md) · [发布隐私说明](docs/privacy.md)。
+
+## 第三方资源
+
+项目使用的内核与字体遵循各自许可证；内核下载地址和摘要见 `tools/*.lock.json`，字体许可证随 `web/assets/` 提供。私有配置、设备快照、部署记录、截图、缓存和二进制运行文件不包含在公开版本中。

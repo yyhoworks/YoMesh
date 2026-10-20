@@ -1,0 +1,9 @@
+{
+  "platform": "linux-amd64",
+  "checked_at": "2026-10-18",
+  "cores": {
+    "mihomo": {"version": "1.19.32", "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-linux-amd64-compatible-v1.19.32.gz", "sha256": "ba3ce607747a07f948fc35780e108a4a7c7f552a38b9bd4d115f313ebcb89c20", "archive": "gzip", "cache_name": "mihomo.gz"},
+    "sing-box": {"version": "1.14.3", "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-amd64.tar.gz", "sha256": "e2bdf179c15a3652955dc44867e33ca0965c9c9b91b34267dcc5a5d639a5feee", "archive": "tar.gz", "cache_name": "sing-box.tar.gz"},
+    "mosdns": {"version": "5.3.4", "url": "https://github.com/IrineSistiana/mosdns/releases/download/v5.3.4/mosdns-linux-amd64.zip", "sha256": "3abcc73080789eb1ccca78dab5049b85ac1e9b8f865ab60158a527b77cd72e85", "archive": "zip", "cache_name": "mosdns.zip"}
+  }
+}

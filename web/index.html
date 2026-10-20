@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark-glass">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YoMesh · 配置工作台</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" href="assets/yomesh-logo.png">
+  <link rel="apple-touch-icon" href="assets/yomesh-logo.png">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="mr-workspace.css">
+  <link rel="stylesheet" href="rules-workbench.css">
+  <link rel="stylesheet" href="operations.css">
+  <link rel="stylesheet" href="configuration.css">
+  <link rel="stylesheet" href="spaces.css">
+  <link rel="stylesheet" href="experience.css">
+  <link rel="stylesheet" href="native-workbench.css">
+  <link rel="stylesheet" href="native-policy.css">
+  <link rel="stylesheet" href="native-members.css">
+  <link rel="stylesheet" href="configuration-workflow.css">
+  <link rel="stylesheet" href="rule-condition-list.css">
+  <script src="app.js" defer></script>
+  <script src="workspace.js" defer></script>
+  <script src="mr-workspace.js" defer></script>
+  <script src="rules-workbench.js" defer></script>
+  <script src="operations.js" defer></script>
+  <script src="rule-editor.js" defer></script>
+  <script src="library-editor.js" defer></script>
+  <script src="native-settings.js" defer></script>
+  <script src="spaces.js" defer></script>
+  <script src="composition.js" defer></script>
+  <script src="space-editor.js" defer></script>
+  <script src="mobile-navigation.js" defer></script>
+  <script src="native-workbench.js" defer></script>
+  <script src="rule-order.js" defer></script>
+  <script src="native-policy.js" defer></script>
+  <script src="configuration-export.js" defer></script>
+  <script src="unified-rule-groups.js" defer></script>
+  <script src="native-members.js" defer></script>
+  <script src="rule-condition-list.js" defer></script>
+  <script src="native-listeners.js" defer></script>
+  <script src="node-group-sections.js" defer></script>
+  <script src="configuration-workflow.js" defer></script>
+  <script src="subscription-links.js" defer></script>
+  <script src="connection.js" defer></script>
+  <link rel="stylesheet" href="mosdns-workbench.css">
+  <script src="mosdns-workbench.js" defer></script>
+  <script src="interaction-tools.js" defer></script>
+  <link rel="stylesheet" href="interaction-tools.css">
+</head>
+<body>
+<div class="wallpaper-layer" aria-hidden="true"></div>
+<a class="skip" href="#workspace">跳到工作区</a>
+<aside class="sidebar">
+  <div class="brand"><img src="assets/yomesh-logo.png" alt="" width="36" height="36"><strong>YoMesh</strong></div>
+  <div class="brand-caption">让配置回归简单</div>
+  <nav id="navigation" aria-label="主导航"></nav>
+  <div class="sidebar-bottom">
+    <div class="local-label"><span class="status-dot"></span> 配置工作区</div>
+    <p>订阅和节点保存在服务端。<br>导出前进行原生内核校验。</p>
+    <button class="text-button" id="show-plan">使用帮助 <span aria-hidden="true">↗</span></button>
+  </div>
+</aside>
+<div class="main-shell">
+  <header class="topbar">
+    <button id="open-navigation" class="icon-button mobile-navigation" aria-label="打开导航" aria-controls="navigation" aria-expanded="false">☰</button><span class="mobile-wordmark">YoMesh</span>
+    <div class="breadcrumb"><label class="space-switcher">当前生成方案<select id="space-select" aria-label="当前生成方案" disabled></select></label><button class="icon-button" id="edit-current-space" title="修改当前方案名称与说明" aria-label="修改当前方案名称与说明">✎</button><span>/</span> <b id="breadcrumb">配置空间</b></div>
+    <div class="top-actions"><span class="demo-badge">连接中…</span><button id="account-btn" class="icon-button" title="账号与密码设置" aria-label="账号与密码设置"></button><button id="appearance" class="icon-button" title="外观设置" aria-label="调整外观"></button><button class="button" id="base-config" hidden>基础配置</button><button class="button" id="export">预览与导出</button></div>
+  </header>
+  <main id="workspace" tabindex="-1">
+    <div class="page-heading"><div><h1 id="page-title">节点组</h1><p id="page-description"></p></div><button id="create" class="button primary"></button></div>
+    <div id="content"></div>
+    <footer class="workspace-footer"><span>代理配置 / DNS 配置</span><span>共享内容，按方案选用</span></footer>
+  </main>
+</div>
+<section id="tweaks" class="tweaks" hidden aria-label="外观调整">
+  <div class="section-title"><h2>外观设置</h2><button class="icon-button" id="close-tweaks" aria-label="关闭外观调整">×</button></div>
+  <label class="field">玻璃主题<select id="theme"><option value="dark-glass">暗夜玻璃</option><option value="light-glass">浅色玻璃</option><option value="aurora-glass">极光玻璃</option></select></label>
+  <label class="field">磨砂程度<input id="glass-blur" type="range" min="8" max="32" value="18"><small>只调整界面效果，不影响配置</small></label>
+  <label class="field">信息密度<select id="density"><option value="comfortable">舒适（默认间距）</option><option value="compact">紧凑（同屏展示更多卡片）</option></select></label>
+  <label class="field">界面字体<select id="font-style"><option value="sans">现代无衬线（清晰推荐）</option><option value="serif">人文衬线（思源宋体标题）</option><option value="mono">极客等宽（规则与地址强化）</option><option value="rounded">温润楷体风格</option></select></label>
+  <input type="checkbox" id="serif" checked hidden>
+</section>
+<dialog id="dialog" aria-labelledby="dialog-title"><div class="dialog-heading"><h2 id="dialog-title"></h2><button class="icon-button" id="close-dialog" aria-label="关闭对话框">×</button></div><div id="dialog-body"></div></dialog>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+</body></html>
