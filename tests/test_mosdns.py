@@ -44,7 +44,7 @@ class MosDNSTests(unittest.TestCase):
         value = {**profile(defaults()), "native_configuration": native}
         original = deepcopy(value)
         for mode in ("inline", "local", "remote"):
-            bundle = compile_bundle(value, "sing-box", component="dns", rule_output=mode)
+            bundle = compile_bundle(value, "sing-box", component="dns", rule_output=mode, dns_engine="mosdns")
             self.assertEqual(set(bundle["manifest"]["versions"]), {"mosdns"})
             self.assertFalse(any(p.startswith("localdns/") for p in bundle["files"]))
             self.assertEqual(validate_bundle(bundle, ROOT)["status"], "passed")
@@ -204,7 +204,8 @@ class MosDNSTests(unittest.TestCase):
                 copy_id = next(s["id"] for s in catalog["spaces"] if s["name"] == "copy")
                 copied = spaces.workspace_snapshot(copy_id)["profile"]
                 self.assertEqual(copied["mosdns"], after["profile"]["mosdns"])
-                self.assertEqual(compile_bundle(copied, component="both", rule_output="remote")["manifest"]["dns_engine"], "mosdns")
+                self.assertEqual(compile_bundle(copied, component="both", rule_output="remote")["manifest"]["dns_engine"], "localdns")
+                self.assertEqual(compile_bundle(copied, component="both", rule_output="remote", dns_engine="mosdns")["manifest"]["dns_engine"], "mosdns")
             finally:
                 spaces.close()
 

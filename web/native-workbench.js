@@ -3,7 +3,7 @@
 const nativeMode=()=>!!data.native_configuration;
 const nativeValue=()=>data.native_configuration;
 const nativeDNSAvailable=()=>liveWorkspace.state?.native_view?.dns_engine==='localdns';
-const nativeDnsName=()=> 'MosDNS';
+const nativeDnsName=()=>nativeDNSAvailable()?'LocalDNS':data.mosdns?'MosDNS':'DNS';
 let nativeDnsTab='basic';
 const nativeTabs={basic:'基础与接线',upstreams:'DNS 上游',switches:'解析开关',cache:'缓存',subscriptions:'DNS 订阅',manual:'本地规则',files:'高级文件'};
 function nativeMap(section){return nativeValue().mihomo[section]||{}}
@@ -112,6 +112,7 @@ function nativeRenderDns(){
   if(tab==='subscriptions')paths=Object.keys(docs).filter(p=>p.startsWith('localdns/config/subscriptions/'));
   if(tab==='manual')paths=Object.keys(docs).filter(p=>p.startsWith('localdns/rules/manual/'));
   if(tab==='files')paths=[...Object.keys(docs),...Object.keys(nativeValue().assets||{})];
+  paths=paths.filter(p=>p in docs||p in (nativeValue().assets||{}));
   const labels={'localdns.json':'监听、API 与内存','overrides.json':'ECS 与代理接线','generated.json':'动态规则容量','domestic.json':'国内上游','foreign.json':'国外上游','foreign_ecs.json':'带 ECS 的国外上游','proxy.json':'Mihomo DNS 上游','upstream_overrides.json':'当前上游开关与覆盖','switches.json':'解析功能开关','client_names.json':'客户端名称','requery.json':'重新查询与定时任务','audit.json':'审计容量','cache.json':'分层缓存与保留时间'};
   $('#content').innerHTML=`<div class="view-tabs native-dns-tabs">${Object.entries(nativeTabs).map(([key,label])=>`<button class="button ${key===tab?'active':''}" data-native-dns-tab="${key}" aria-pressed="${key===tab}">${label}</button>`).join('')}</div><p class="notice">此设备实际使用 LocalDNS FJGAC。这里保存原生多上游、ECS、缓存、规则与定时设置；修改只写本方案，导出后再部署到目标设备。</p><div class="native-resource-list">${paths.map(path=>{let detail=path.replace('localdns/','');if(path.endsWith('switches.json')){const v=nativeJson(path);detail=Object.entries(v).map(([k,val])=>k+': '+val).join(' · ')}else if(path.startsWith('localdns/config/subscriptions/')){const list=JSON.parse(docs[path]);detail=list.filter(s=>s.enabled).length+' / '+list.length+' 条启用 · 可添加、删除和修改来源'}return `<article class="panel native-resource-row"><div class="native-resource-name"><strong>${esc(labels[path.split('/').at(-1)]||path.split('/').at(-1))}</strong><small>${esc(detail)}</small></div>${docs[path]!==undefined?`<button class="button" data-native-dns-file="${esc(path)}">编辑</button>`:`<button class="button" data-native-asset="${esc(path)}">替换文件</button>`}</article>`}).join('')}</div><div class="filter-row" style="margin-top:20px"><button class="button primary" id="native-dns-check">原生校验</button><button class="button" id="native-dns-generate">导出 LocalDNS</button><button class="button" id="native-add-file">添加配置文件</button></div>`;
   $$('[data-native-dns-tab]').forEach(b=>b.onclick=()=>{nativeDnsTab=b.dataset.nativeDnsTab;nativeRenderDns()});

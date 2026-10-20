@@ -232,25 +232,31 @@ def compile_mosdns(profile: Profile):
     return {"log": {"level": "info"}, "plugins": plugins}, diagnostics
 
 
-def compile_bundle(value, proxy="mihomo", group_mode_overrides=None, rule_output="inline", component="both"):
+def compile_bundle(value, proxy="mihomo", group_mode_overrides=None, rule_output="inline", component="both", *, dns_engine=None):
     if component not in {"both", "proxy", "dns"}:
         raise ConfigError("component: 请选择 proxy、dns 或 both")
     if rule_output not in {"remote", "local", "inline"}:
         raise ConfigError("规则输出方式无效")
     if component == "dns" and group_mode_overrides:
         raise ConfigError("DNS 独立导出不需要节点组兼容转换")
-    if isinstance(value, dict) and "mosdns" in value and component == "dns":
+    from .dns_engine import engine_for
+    engine = engine_for(value) if dns_engine is None else dns_engine
+    if engine not in {None, "localdns", "mosdns"}:
+        raise ConfigError("DNS 内核无效")
+    if engine == "localdns" and engine_for(value) != "localdns":
+        raise ConfigError("当前空间没有 LocalDNS 原生配置")
+    if isinstance(value, dict) and "mosdns" in value and component == "dns" and engine == "mosdns":
         from .mosdns import bundle as dns_bundle
         # The independent DNS model is validated through Profile even for native
         # proxy drafts with unresolved references. No native rule is translated.
         profile = Profile.for_dns({"schema_version": 1, "fallback": "DIRECT", "settings": value.get("settings", {}), "mosdns": value["mosdns"]})
         return dns_bundle(profile.data, rule_output)
-    if isinstance(value, dict) and "mosdns" in value and component == "both":
+    if isinstance(value, dict) and "mosdns" in value and component == "both" and engine == "mosdns":
         # The compatibility CLI package combines the same two independently
         # rendered components. It must not infer DNS's SOCKS or listener from
         # the proxy base, or substitute the legacy DNS settings.
         proxy_bundle = compile_bundle(value, proxy, group_mode_overrides, rule_output, "proxy")
-        dns_bundle = compile_bundle(value, proxy, None, rule_output, "dns")
+        dns_bundle = compile_bundle(value, proxy, None, rule_output, "dns", dns_engine="mosdns")
         proxy_bundle["files"].update(dns_bundle["files"])
         manifest = proxy_bundle["manifest"]
         manifest.update(component="both", dns_engine="mosdns", startup_order=[proxy, "mosdns"])

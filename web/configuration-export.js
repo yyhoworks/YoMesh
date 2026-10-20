@@ -3,8 +3,8 @@ $('#show-plan').onclick=()=>showDialog('配置与导出','<p>代理配置：先�
 
 async function openConfigurationExport(component='proxy'){
   try{await saveSpaceDrafts()}catch(error){toast(error.message);return}
-  if(component==='dns'&&nativeMode()&&!data.mosdns){toast('请先在 MosDNS 页面保存独立配置。');return}
-  const dns=component==='dns',native=nativeMode()&&!(dns&&data.mosdns),engine='MosDNS';
+  if(component==='dns'&&nativeMode()&&!nativeDNSAvailable()&&!data.mosdns){toast('此空间只有 Mihomo 内置 DNS，请在基础设置中编辑。');return}
+  const dns=component==='dns',native=nativeMode()&&(!dns||nativeDNSAvailable()),engine=nativeDNSAvailable()?'LocalDNS':'MosDNS';
   showDialog(dns?'导出 '+engine:'导出代理配置',`<form id="native-export-form">
     <p class="export-scope">${esc(activeSpace()?.name||'当前配置空间')} · ${dns?'独立 DNS 配置':'基础配置 + 入站 + 节点组 + 有序规则'}</p>
     ${dns?`<p>只生成 ${engine} 配置和所需规则文件。上游与代理接线保留当前设置。</p>`:`<label class="field">代理内核<select id="export-proxy"><option value="mihomo">Mihomo · YAML</option>${native?'<option disabled>sing-box · 当前原生空间不支持转换</option>':'<option value="sing-box">sing-box · JSON</option>'}</select></label>`}
@@ -65,7 +65,7 @@ async function openConfigurationExport(component='proxy'){
     const controls=$$('#native-export-form input,#native-export-form select,#native-export-form button');controls.forEach(el=>el.disabled=true);$('#native-export-submit').textContent=preview?'校验并下载':'正在校验…';
     try{
       const body=await request();if(JSON.stringify(body)!==preflightFingerprint)throw Error('导出选项已变化，请等待配置检查完成。');
-      if(preview){const result=await api('/api/workspace/preview-export',body);result.files['manifest.json']=JSON.stringify(result.manifest,null,2);const names=Object.keys(result.files),main=dns?'mosdns.yaml':body.proxy+(body.proxy==='mihomo'?'.yaml':'.json');names.sort((a,b)=>a===main?-1:b===main?1:0);$('#export-preview-file').innerHTML=names.map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('');$('#export-preview-file').onchange=e=>$('#export-preview-code').textContent=result.files[e.target.value];$('#export-preview-code').textContent=result.files[names[0]];$('#export-preview').hidden=false}
+      if(preview){const result=await api('/api/workspace/preview-export',body);result.files['manifest.json']=JSON.stringify(result.manifest,null,2);const names=Object.keys(result.files),main=dns?(engine==='LocalDNS'?'localdns/config/localdns.json':'mosdns.yaml'):body.proxy+(body.proxy==='mihomo'?'.yaml':'.json');names.sort((a,b)=>a===main?-1:b===main?1:0);$('#export-preview-file').innerHTML=names.map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('');$('#export-preview-file').onchange=e=>$('#export-preview-code').textContent=result.files[e.target.value];$('#export-preview-code').textContent=result.files[names[0]];$('#export-preview').hidden=false}
       else{const response=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json',...workspaceHeaders()},body:JSON.stringify(body)});if(!response.ok)throw Error((await response.json()).error||'原生校验未通过。');const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download=(activeSpace()?.name||'yomesh').replace(/[\\/:*?"<>|]/g,'_')+'-'+(dns?engine.toLowerCase():body.proxy)+'.zip';link.click();setTimeout(()=>URL.revokeObjectURL(url),2000);toast((dns?engine:body.proxy)+' 原生校验通过，已下载独立配置包。')}
     }catch(error){$('#export-error').textContent=error instanceof SyntaxError?'文件不是有效的 JSON。':error.message}
     finally{pending=false;$('#close-dialog').disabled=false;controls.forEach(el=>el.disabled=false);$('#native-export-submit').disabled=!preflightReady;$('#native-export-preview').disabled=!preflightReady;$('#native-export-submit').textContent='校验并下载'}

@@ -66,9 +66,9 @@ class MosDNSImportTests(unittest.TestCase):
         self.assertTrue(any(row["name"] == "PCDN IPv4 正则" and row["status"] == "unsupported" for row in result["report"]["items"]))
         self.assertFalse(config["migration"]["reviewed"])
         with self.assertRaisesRegex(ConfigError, "迁移报告"):
-            compile_bundle({**profile, "mosdns": config}, component="dns")
+            compile_bundle({**profile, "mosdns": config}, component="dns", dns_engine="mosdns")
         config["migration"]["reviewed"] = True
-        bundle = compile_bundle({**profile, "mosdns": config}, component="dns")
+        bundle = compile_bundle({**profile, "mosdns": config}, component="dns", dns_engine="mosdns")
         self.assertTrue(bundle["manifest"]["diagnostics"])
         self.assertEqual(bundle["files"]["migration-report.json"], config["migration"])
         self.assertEqual(validate_bundle(bundle, ROOT)["status"], "passed")

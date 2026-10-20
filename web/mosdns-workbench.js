@@ -80,10 +80,12 @@ async function renderMosdns(){
  if($('#md-export-model'))$('#md-export-model').onclick=()=>{try{const url=URL.createObjectURL(new Blob([JSON.stringify(mosdnsValue(),null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='yomesh-mosdns-settings.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}catch(error){fail(error)}};
 }
 
-renderDns=renderMosdns;nativeRenderDns=renderMosdns;
+const renderSavedNativeDns=nativeRenderDns;
+renderDns=function(){return nativeMode()&&(nativeDNSAvailable()||!data.mosdns)?renderSavedNativeDns():renderMosdns()};
+nativeRenderDns=renderDns;
 const saveBeforeMosdns=saveSpaceDrafts;
 saveSpaceDrafts=async function(){await saveMosdnsDraft();return saveBeforeMosdns()};
 const renderBeforeMosdns=render;
-render=function(){renderBeforeMosdns();if(!liveWorkspace.state)return;const label='MosDNS 配置',link=$('#navigation a[href="#dns"] span');if(link)link.textContent=label;if(page==='dns'){$('#page-title').textContent=label;$('#breadcrumb').textContent=label;$('#page-description').textContent='按当前空间独立保存上游、解析规则、缓存与监听。';$('#export').disabled=false;$('#export').textContent='导出 MosDNS';const footer=$$('.workspace-footer span');if(footer[0])footer[0].textContent='MosDNS 5.3.4 独立配置'}};
+render=function(){renderBeforeMosdns();if(!liveWorkspace.state)return;const engine=nativeMode()?nativeDnsName():'MosDNS',label=engine+' 配置',link=$('#navigation a[href="#dns"] span');if(link)link.textContent=label;if(page==='dns'){$('#page-title').textContent=label;$('#breadcrumb').textContent=label;$('#page-description').textContent=nativeDNSAvailable()?'保留 LocalDNS 原生配置、规则和功能开关；不转换为 MosDNS。':'按当前空间独立保存上游、解析规则、缓存与监听。';$('#export').disabled=nativeMode()&&!nativeDNSAvailable()&&!data.mosdns;$('#export').textContent=$('#export').disabled?'无独立 DNS 配置':'导出 '+engine;const footer=$$('.workspace-footer span');if(footer[0])footer[0].textContent=nativeDNSAvailable()?'LocalDNS FJGAC 原生配置':$('#export').disabled?'Mihomo 内置 DNS':'MosDNS 5.3.4 独立配置'}};
 window.addEventListener('beforeunload',event=>{if([...mosdnsDrafts.values()].some(e=>e.dirty)){event.preventDefault();event.returnValue=''}});
 if(liveWorkspace.state&&page==='dns')render();

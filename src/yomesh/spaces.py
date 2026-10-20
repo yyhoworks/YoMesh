@@ -363,9 +363,10 @@ class ConfigurationSpaces:
                     raw.update(deepcopy(self._item(item["id"]).get("overrides", {})))
                     raw["composition"] = item.get("composition", {})
                     generation = self.generation_preview(raw, (item["id"], workspace.state["revision"], self.state["revision"]))
+                    from .dns_engine import engine_for
+                    item["dns_engine"] = engine_for(raw)
                     if "native_configuration" in raw:
                         item["native"] = True
-                        item["dns_engine"] = generation.get("dns_engine")
                         item["counts"].update(generation["counts"])
                     item["generation"] = {k: generation[k] for k in ("valid", "counts", "error", "excluded_policies")}
                     if generation["valid"]:

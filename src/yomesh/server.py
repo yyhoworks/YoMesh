@@ -350,7 +350,7 @@ def handler_for(root: Path, port: int, public_hosts=()):
                     if self.path.endswith("/save"):
                         self.json_response(200, spaces.save_mosdns(profile["mosdns"], request.get("revision"), scope))
                     else:
-                        bundle = compile_bundle(profile, rule_output="inline", component="dns")
+                        bundle = compile_bundle(profile, rule_output="inline", component="dns", dns_engine="mosdns")
                         if self.path.endswith("/check"):
                             validate_bundle(bundle, root)
                         self.json_response(200, {"config": bundle["files"]["mosdns.yaml"], "settings": profile["mosdns"], "validation": bundle["manifest"]["validation"]})
