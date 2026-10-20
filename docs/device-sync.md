@@ -4,21 +4,21 @@ YoMesh 的设备同步以原生 Mihomo / LocalDNS 配置为准。它是显式的
 
 ## 四阶段工作流
 
-1. **登记并安装**：在左侧独立的“设备同步”页面登记每台服务器，独立核对 SSH 主机指纹。YoMesh 为每台设备生成一把专用 SSH 密钥；私钥只存于被忽略的 `data/device-keys/`。目标设备一次性安装受限执行器，公钥被强制命令限制，不能获得任意 shell。
-2. **只读读取**：执行器读取指定 Mihomo 主配置、其引用的本地文件，以及 LocalDNS 的 `config/`、`rules/`、`generated/`。页面展示文件摘要和差异；确认后导入或更新独立原生配置空间。此阶段不重启服务、不改目标文件。订阅快照和动态表随后仍会由各自内核运行态改变。
-3. **预检与发布**：编辑该空间后执行“发布预检”。YoMesh 先比较上次读取时的文件 SHA-256；设备有外部修改即拒绝覆盖。发布包在目标设备用实际 Mihomo / LocalDNS 程序加载检查，展示新增、修改、删除的文件清单和包摘要。用户在工作台对这一包再次确认后，执行器备份目标文件、写入、重启并检查服务；失败自动回滚。成功后才能更新同步基准，且可对未再次改变的文件手动回滚。
+1. **登记并安装**：在左侧“设备同步”页面填写服务器名称与 IP，核对 SSH 主机指纹（Mihomo / LocalDNS 的路径与服务默认已预填标准值，并支持在目标机器上自动识别）。YoMesh 为每台设备生成一把专用 SSH 密钥；私钥只存于被忽略的 `data/device-keys/`。在目标设备 root 终端执行页面生成的一键自包含安装命令（或上传四个离线文件），即可将公钥以强制受限命令写入，不能获得任意 shell。
+2. **一键连接与只读读取**：安装后直接点击弹窗底部的“我已安装，立即连接并导入配置”（或在列表中点“读取并导入”）。执行器读取指定 Mihomo 主配置、其引用的本地文件，以及 LocalDNS 的 `config/`、`rules/`、`generated/`，导入或更新独立原生配置空间。此阶段不重启服务、不改目标文件。订阅快照和动态表随后仍会由各自内核运行态改变。
+3. **顶栏直达预检与发布**：在已绑定设备的配置空间编辑后，可直接点击工作台顶栏的“发布到「服务器名」”按钮（若有未保存草稿会自动先保存）。YoMesh 先比较上次读取时的文件 SHA-256；设备有外部修改即拒绝覆盖。发布包在目标设备用实际 Mihomo / LocalDNS 程序加载检查，展示新增、修改、删除的文件清单和包摘要。确认发布后，执行器备份目标文件、写入、重启并检查服务，前端自动轮询完成状态并更新同步基准；失败自动回滚，成功发布的版本也可手动回滚。
 4. **Hermes 联动**：工作台生成一次性展示、可轮换/撤销的接入令牌。Hermes 上的 stdio MCP 桥只提供设备列表、只读比对、发布预检、记录与状态；它不能确认发布、回滚、取得设备 root 密码或完整代理凭据。最终发布仍需回到 YoMesh 工作台。
 
 ## 安装到一台指定服务器
 
-目标需要 Linux、Python 3.11+、SSH、OpenRC 或 systemd，以及已存在的 Mihomo / LocalDNS 程序、初始配置和服务。空白机器需先完成这些准备，当前页面不自动安装内核或创建服务。在“设备同步 → 新服务器如何接入？”可查看完整步骤。先在服务器本机核对主机指纹，再填写连接表单。生成密钥后，页面直接提供 `device.pub`、`target.json`、`device_installer.py` 和 `device_executor.py` 四个文件下载；用 SFTP / WinSCP 上传到目标设备同一临时目录。不要把私钥、密码、订阅文件或真实 `target.json` 提交到 Git。
+目标需要 Linux、Python 3.11+、SSH、OpenRC 或 systemd，以及已存在的 Mihomo / LocalDNS 程序、初始配置和服务。空白机器需先完成这些准备，当前页面不自动安装内核或创建服务。在“设备同步 → 新服务器如何接入？”可查看完整步骤。先在服务器本机核对主机指纹，再填写服务器名称与 IP（若使用非标准路径，可展开“路径与服务设置”修改）。生成密钥后，可直接复制页面生成的自包含 `python3 -c '...'` 一键安装命令到目标服务器 root 终端执行；或在展开的备用方式中下载 `device.pub`、`target.json`、`device_installer.py` 和 `device_executor.py` 四个文件上传到同一临时目录执行。不要把私钥、密码、订阅文件或真实 `target.json` 提交到 Git。
 
 ```sh
 python3 device_installer.py target.json device.pub --check
 python3 device_installer.py target.json device.pub
 ```
 
-安装器要求 root，仅在检查通过后修改 `/root/.ssh/authorized_keys`、`/etc/yomesh-executor/target.json` 和 `/usr/local/lib/yomesh-executor/runner.py`，旧文件备份在 `target.json` 指定的 `state_dir/installer-backups/` 下。`target.json` 固定工作目录、主文件、二进制、服务名和状态目录；每次 SSH 请求不能改这些路径。目标若需 `LD_PRELOAD` 等原生校验环境，使用表单“校验程序所需环境变量”生成 `validation_env`，只填固定路径，不填密码。安装后点击工作台“检查连接”，再“读取并比对”。
+安装器要求 root，当默认路径不存在时会自动识别常见的 Mihomo / LocalDNS 路径与 `systemd` / `openrc` 服务管理方式，仅在检查通过后修改 `/root/.ssh/authorized_keys`、`/etc/yomesh-executor/target.json` 和 `/usr/local/lib/yomesh-executor/runner.py`，旧文件备份在 `target.json` 指定的 `state_dir/installer-backups/` 下。`target.json` 固定工作目录、主文件、二进制、服务名和状态目录；每次 SSH 请求不能改这些路径。目标若需 `LD_PRELOAD` 等原生校验环境，使用表单“校验程序所需环境变量”生成 `validation_env`，只填固定路径，不填密码。安装后点击弹窗中的“我已安装，立即连接并导入配置”即可直接进入工作台编辑。
 
 新增引用文件若已在设备上存在、却未进入上次读取基准，发布会拒绝覆盖。删除的旧文件会先备份，回滚时恢复。读取预览分别显示参与发布比对的文件和 LocalDNS `generated/` 运行态表；自动刷新只改变后者时，受管配置仍显示一致，可按需更新工作台快照。运行态动态表不作为发布冲突基准；若它们影响效果，需要另外做实网对照。
 

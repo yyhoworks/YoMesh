@@ -5,10 +5,10 @@
 function deviceServerGuide(){
   return `<details class="device-guide"><summary>新服务器如何接入？</summary>
     <ol class="device-steps">
-      <li><strong>准备目标服务器</strong><p>需要 Linux、Python 3.11+、SSH，以及 OpenRC 或 systemd。先安装 Mihomo、LocalDNS，准备能正常启动的配置与服务。空白机器需要先完成这些准备；本页暂不自动安装内核或创建服务。</p></li>
-      <li><strong>在本页登记服务器</strong><p>点击“连接服务器”，填写该机器实际使用的路径与服务名。到目标服务器终端执行下面的命令，将指纹与表单读取的结果核对。</p><pre>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256</pre><p>若 SSH 使用其他主机密钥，请核对对应的 <code>ssh_host_*_key.pub</code>。</p></li>
-      <li><strong>下载并安装连接文件</strong><p>生成设备密钥后，页面会提供公钥、目标设置和两个安装脚本。把四个文件上传到目标服务器同一目录，以 root 执行页面给出的检查与安装命令。</p></li>
-      <li><strong>读取配置，再开始编辑</strong><p>返回这里依次点击“检查连接”“读取并比对”“导入为独立空间”。修改该空间后，点击“发布预检”，核对差异并确认发布。每台服务器独立登记、独立建立读取基准。</p></li>
+      <li><strong>准备目标服务器</strong><p>需要 Linux、Python 3.11+、SSH，以及 OpenRC 或 systemd。先安装 Mihomo、LocalDNS，准备能正常启动的配置与服务。</p></li>
+      <li><strong>填写名称与 IP 并核对指纹</strong><p>点击“连接服务器”，填写名称与 IP（常用路径与服务已预填标准值，安装时也会自动识别）。到目标服务器终端执行以下命令核对 SSH 主机指纹：</p><pre>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256</pre></li>
+      <li><strong>复制一行命令完成安装</strong><p>生成设备密钥后，复制页面生成的自包含一键安装命令，在目标服务器的 root 终端粘贴回车即可自动完成自检与受限执行器安装（也支持备用下载四个文件上传安装）。</p></li>
+      <li><strong>一键连接并同步</strong><p>点击弹窗底部“我已安装，立即连接并导入配置”，即可自动读取服务器配置并打开独立配置空间。后续修改配置时，直接点击工作台顶栏“同步到设备”即可一键预检发布。</p></li>
     </ol></details>`;
 }
 
@@ -31,14 +31,36 @@ function bindSetupCopies(root=$('#dialog')){
 }
 
 function showDeviceInstall(result,settings,stateDir,validationEnv){
-  const policy={format:'yomesh-executor-v1',manager:settings.manager,mihomo_home:settings.mihomo_home,mihomo_config:settings.mihomo_config,mihomo_binary:settings.mihomo_binary,localdns_root:settings.localdns_root,localdns_binary:settings.localdns_binary,state_dir:stateDir,services:settings.services,validation_env:validationEnv};
+  const policy=result.target_policy||{format:'yomesh-executor-v1',manager:settings.manager,mihomo_home:settings.mihomo_home,mihomo_config:settings.mihomo_config,mihomo_binary:settings.mihomo_binary,localdns_root:settings.localdns_root,localdns_binary:settings.localdns_binary,state_dir:stateDir,services:settings.services,validation_env:validationEnv};
   const target=JSON.stringify(policy,null,2)+'\n';
-  showDialog('安装受限执行器 · '+result.device.name,`<div class="device-install"><p class="notice">已登记服务器。完成下面的一次性安装后，YoMesh 才能连接这台机器。</p><ol class="device-steps"><li><strong>下载四个安装文件</strong><p>公钥和设置专属于这台设备。两个 Python 脚本由当前 YoMesh 提供。</p><div class="setup-downloads"><button type="button" class="button" id="device-download-key">下载 device.pub</button><button type="button" class="button" id="device-download-target">下载 target.json</button><a class="button" href="/api/setup/device_installer.py" download>下载安装脚本</a><a class="button" href="/api/setup/device_executor.py" download>下载执行器脚本</a></div><details><summary>查看公钥与目标设置</summary><label class="field">设备专用公钥<textarea rows="3" readonly>${esc(result.public_key)}</textarea></label><label class="field">target.json<textarea rows="10" readonly>${esc(target)}</textarea></label></details></li><li><strong>上传到目标服务器并安装</strong><p>用 SFTP / WinSCP 将四个文件上传到同一目录，例如 <code>/tmp/yomesh-setup</code>。在<strong>目标服务器的 root 终端</strong>执行：</p><label class="field">目标服务器安装命令<textarea id="device-install-command" rows="3" readonly>cd /tmp/yomesh-setup
-python3 device_installer.py target.json device.pub --check
-python3 device_installer.py target.json device.pub</textarea></label><button type="button" class="button" data-setup-copy="device-install-command">复制安装命令</button><p>检查返回 <code>ready: true</code> 后再安装；安装成功会返回 <code>installed: true</code> 和备份位置。安装目录不同请修改第一行。</p></li><li><strong>回到 YoMesh 完成首次读取</strong><p>关闭此窗口，依次点击该设备的“检查连接”“读取并比对”“导入为独立空间”。出现原生配置空间后即可开始编辑。</p></li></ol><p class="preview-note">安装会备份并更新 root 的 authorized_keys。设备密钥只允许使用受限执行器；YoMesh 不保存 root 密码。</p><div class="dialog-actions"><button type="button" class="button primary" id="device-install-done">返回检查连接</button></div></div>`);
+  const manualCmd=`cd /tmp/yomesh-setup\npython3 device_installer.py target.json device.pub --check\npython3 device_installer.py target.json device.pub`;
+  const oneLineCmd=result.install_command||manualCmd;
+  showDialog('安装受限执行器 · '+result.device.name,`<div class="device-install"><p class="notice">已生成设备专用密钥。复制下面的一键安装命令到目标服务器终端执行，即可直接连接并导入配置。</p><ol class="device-steps"><li><strong>在目标服务器（root 终端）执行一键安装</strong><p>此命令已内联包含设备专用公钥、目标设置与受限执行器，无需手动上传文件，也不要求目标服务器反向连接 YoMesh：</p><label class="field">目标服务器一键安装命令<textarea id="device-install-command" rows="4" readonly spellcheck="false">${esc(oneLineCmd)}</textarea></label><div class="setup-downloads"><button type="button" class="button primary" data-setup-copy="device-install-command">复制一键安装命令</button></div><p>粘贴执行后，看到 <code>"installed": true</code> 即表示受限执行器已安装完成。</p><details class="advanced-options"><summary>备用方式：下载四个安装文件手动上传（SFTP / WinSCP）</summary><div class="setup-downloads"><button type="button" class="button" id="device-download-key">下载 device.pub</button><button type="button" class="button" id="device-download-target">下载 target.json</button><a class="button" href="/api/setup/device_installer.py" download>下载安装脚本</a><a class="button" href="/api/setup/device_executor.py" download>下载执行器脚本</a></div><label class="field">手动上传后执行命令<textarea id="device-manual-command" rows="3" readonly>${esc(manualCmd)}</textarea></label><button type="button" class="button" data-setup-copy="device-manual-command">复制手动安装命令</button><label class="field">设备专用公钥<textarea rows="3" readonly>${esc(result.public_key)}</textarea></label><label class="field">target.json<textarea rows="8" readonly>${esc(target)}</textarea></label></details></li><li><strong>立即连接并导入服务器配置</strong><p>在服务器执行完安装命令后，直接点击下方“我已安装，立即连接并导入配置”，系统会自动检查连接、拉取配置并创建独立工作台空间。</p></li></ol><p class="preview-note">安装会自动备份并更新 root 的 authorized_keys。设备密钥仅允许调用受限执行器；YoMesh 不保存 root 密码。</p><p class="device-status" id="device-install-status" role="status" hidden></p><p class="error-message" id="device-install-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button" id="device-install-done">稍后手动读取</button><button type="button" class="button primary" id="device-install-connect">我已安装，立即连接并导入配置</button></div></div>`);
   $('#device-download-key').onclick=()=>setupDownload('device.pub',result.public_key+'\n');
   $('#device-download-target').onclick=()=>setupDownload('target.json',target);
   $('#device-install-done').onclick=()=>$('#dialog').close();
+  $('#device-install-connect').onclick=async event=>{
+    if(deviceBusy)return;
+    const button=event.currentTarget,statusEl=$('#device-install-status'),errorEl=$('#device-install-error');
+    deviceBusy=true;button.disabled=true;$('#device-install-done').disabled=true;errorEl.textContent='';
+    statusEl.hidden=false;statusEl.textContent='正在检查执行器连接并读取服务器配置…';
+    try{
+      if(typeof saveSpaceDrafts==='function'&&(dirty()||dnsEdited))await saveSpaceDrafts();
+      await api(`/api/devices/${result.device.id}/probe`);
+      const preview=await api(`/api/devices/${result.device.id}/preview-pull`);
+      const pulled=await api(`/api/devices/${result.device.id}/pull`,{remote_digest:preview.remote_digest});
+      $('#dialog').close();
+      await refreshDevices();
+      if(pulled.space_id!==spaceId)await switchSpace(pulled.space_id);
+      else await reloadWorkspace();
+      if(page==='sync')location.hash='groups';
+      toast(`已连接「${result.device.name}」并导入为独立配置空间。`);
+    }catch(error){
+      statusEl.hidden=true;
+      errorEl.textContent=error.message;
+      button.disabled=false;$('#device-install-done').disabled=false;
+    }finally{deviceBusy=false}
+  };
   bindSetupCopies();
 }
 

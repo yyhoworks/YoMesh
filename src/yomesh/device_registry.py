@@ -107,12 +107,22 @@ class DeviceRegistry:
                 raise ConfigError("SSH 端口无效")
             if not isinstance(host_key, str) or not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{43}", host_key):
                 raise ConfigError("请填写经过核对的 SSH 主机指纹")
-            paths = {key: _absolute(values.get(key)) for key in ("mihomo_home", "mihomo_config", "mihomo_binary", "localdns_root", "localdns_binary")}
+            raw_home = values.get("mihomo_home") if "mihomo_home" in values and values.get("mihomo_home") is not None else "/etc/mihomo"
+            defaults = {
+                "mihomo_home": raw_home,
+                "mihomo_config": (raw_home.rstrip("/") + "/config.yaml") if isinstance(raw_home, str) else "/etc/mihomo/config.yaml",
+                "mihomo_binary": "/usr/local/bin/mihomo",
+                "localdns_root": "/opt/localdns",
+                "localdns_binary": "/opt/localdns/localdns",
+            }
+            paths = {key: _absolute(values[key] if key in values and values[key] is not None else defaults[key])
+                     for key in ("mihomo_home", "mihomo_config", "mihomo_binary", "localdns_root", "localdns_binary")}
             if paths["mihomo_home"].rstrip('/') in {'', '/etc', '/opt', '/usr', '/var', '/root', '/home'} or paths["localdns_root"].rstrip('/') in {'', '/etc', '/opt', '/usr', '/var', '/root', '/home'}:
                 raise ConfigError('设备配置根目录范围过宽，请指定服务专用目录')
             if not paths["mihomo_config"].startswith(paths["mihomo_home"].rstrip('/') + '/'):
                 raise ConfigError('Mihomo 主配置需位于其工作目录内')
-            manager, services = values.get('manager'), values.get('services')
+            manager = values.get('manager') if 'manager' in values and values.get('manager') is not None else 'systemd'
+            services = values.get('services') if 'services' in values and values.get('services') is not None else {'mihomo': 'mihomo', 'localdns': 'localdns'}
             if manager not in {'openrc', 'systemd'} or not isinstance(services, dict) or set(services) != {'mihomo', 'localdns'} or any(not isinstance(s, str) or not re.fullmatch(r'[A-Za-z0-9_.@-]{1,80}', s) for s in services.values()):
                 raise ConfigError('请选择支持的服务管理方式和服务名称')
             if len(self.state["devices"]) >= 32 or any(d["host"] == host and d["port"] == port for d in self.state["devices"]):

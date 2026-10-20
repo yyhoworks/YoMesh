@@ -31,6 +31,42 @@ def _atomic_bytes(path: Path, body: bytes, mode: int):
             os.unlink(temporary)
 
 
+def _autodetect_settings(settings: dict):
+    home = Path(settings['mihomo_home'])
+    if not Path(settings['mihomo_config']).is_file() and home.is_dir():
+        for name in ('config.yaml', 'mihomo.yaml', 'config.yml'):
+            candidate = home / name
+            if candidate.is_file():
+                settings['mihomo_config'] = str(candidate)
+                break
+    if not Path(settings['mihomo_binary']).is_file():
+        for raw in (shutil.which('mihomo'), '/usr/local/bin/mihomo', '/usr/bin/mihomo',
+                    '/opt/mihomo/mihomo', str(home / 'mihomo')):
+            if raw and Path(raw).is_file():
+                settings['mihomo_binary'] = str(Path(raw))
+                break
+    dns_root = Path(settings['localdns_root'])
+    if not dns_root.is_dir():
+        for raw in ('/opt/localdns', '/etc/localdns', '/usr/local/localdns'):
+            if Path(raw).is_dir():
+                dns_root = Path(raw)
+                settings['localdns_root'] = raw
+                break
+    if not Path(settings['localdns_binary']).is_file():
+        for raw in (str(dns_root / 'localdns'), shutil.which('localdns'),
+                    '/usr/local/bin/localdns', '/usr/bin/localdns'):
+            if raw and Path(raw).is_file():
+                settings['localdns_binary'] = str(Path(raw))
+                break
+    if RUNNER == Path(__file__).with_name('device_executor.py'):
+        has_systemd = Path('/run/systemd/system').is_dir() or bool(shutil.which('systemctl'))
+        has_openrc = bool(shutil.which('rc-service'))
+        if settings.get('manager') == 'openrc' and not has_openrc and has_systemd:
+            settings['manager'] = 'systemd'
+        elif settings.get('manager') == 'systemd' and not has_systemd and has_openrc:
+            settings['manager'] = 'openrc'
+
+
 def install(settings_path, public_key_path, *, dry_run=False):
     if os.geteuid() != 0:
         raise RuntimeError('请由目标设备管理员以 root 执行安装')
@@ -41,6 +77,7 @@ def install(settings_path, public_key_path, *, dry_run=False):
         value = settings.get(key)
         if not isinstance(value, str) or not value.startswith('/') or '..' in Path(value).parts:
             raise RuntimeError('目标路径必须是绝对路径')
+    _autodetect_settings(settings)
     broad = {'/', '/etc', '/opt', '/usr', '/var', '/root', '/home'}
     mihomo_home = Path(settings['mihomo_home']).resolve()
     localdns_root = Path(settings['localdns_root']).resolve()

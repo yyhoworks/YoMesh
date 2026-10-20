@@ -135,8 +135,71 @@ class DeviceManagement:
     def listing(self):
         return self.registry.listing()
 
+    def _build_install_bundle(self, device: dict, public_key: str, settings: dict | None):
+        import re
+        import zlib
+        from .device_registry import _absolute
+        raw = settings if isinstance(settings, dict) else {}
+        state_dir = _absolute(raw['state_dir'] if 'state_dir' in raw and raw.get('state_dir') is not None else '/var/lib/yomesh-executor')
+        validation_env = raw['validation_env'] if 'validation_env' in raw and raw.get('validation_env') is not None else {}
+        if (not isinstance(validation_env, dict) or
+                any(not isinstance(k, str) or not re.fullmatch(r'[A-Z][A-Z0-9_]*', k) or
+                    not isinstance(v, str) or len(v) > 512 for k, v in validation_env.items())):
+            raise ConfigError('原生校验环境变量设置无效')
+        policy = {
+            'format': 'yomesh-executor-v1',
+            'manager': device['manager'],
+            'mihomo_home': device['mihomo_home'],
+            'mihomo_config': device['mihomo_config'],
+            'mihomo_binary': device['mihomo_binary'],
+            'localdns_root': device['localdns_root'],
+            'localdns_binary': device['localdns_binary'],
+            'state_dir': state_dir,
+            'services': device['services'],
+            'validation_env': validation_env,
+        }
+        scripts_dir = self.root / 'scripts'
+        if not (scripts_dir / 'device_installer.py').is_file():
+            scripts_dir = Path(__file__).resolve().parents[2] / 'scripts'
+        try:
+            installer_code = (scripts_dir / 'device_installer.py').read_text(encoding='utf-8')
+            executor_code = (scripts_dir / 'device_executor.py').read_text(encoding='utf-8')
+        except OSError:
+            return policy, None
+        payload = base64.b64encode(zlib.compress(json.dumps({
+            'target': policy,
+            'public_key': public_key.strip() + '\n',
+            'installer': installer_code,
+            'executor': executor_code,
+        }, ensure_ascii=False, separators=(',', ':')).encode('utf-8'), level=9)).decode('ascii')
+        command = (
+            "python3 -c 'import atexit,base64,json,pathlib,runpy,shutil,sys,tempfile,zlib;"
+            f'p=json.loads(zlib.decompress(base64.b64decode("{payload}")));'
+            'd=pathlib.Path(tempfile.mkdtemp(prefix="yomesh-setup-"));atexit.register(shutil.rmtree,d,True);'
+            '(d/"target.json").write_text(json.dumps(p["target"],ensure_ascii=False,indent=2)+"\\n",encoding="utf-8");'
+            '(d/"device.pub").write_text(p["public_key"],encoding="utf-8");'
+            '(d/"device_executor.py").write_text(p["executor"],encoding="utf-8");'
+            '(d/"device_installer.py").write_text(p["installer"],encoding="utf-8");'
+            'sys.argv=[str(d/"device_installer.py"),str(d/"target.json"),str(d/"device.pub"),"--check"];'
+            'runpy.run_path(sys.argv[0],run_name="__main__");'
+            'sys.argv=sys.argv[:3];runpy.run_path(sys.argv[0],run_name="__main__")\''
+        )
+        return policy, command
+
     def add(self, settings, revision):
-        return self.registry.add(settings, revision)
+        if isinstance(settings, dict):
+            from .device_registry import _absolute
+            import re
+            if 'state_dir' in settings and settings.get('state_dir') is not None:
+                _absolute(settings.get('state_dir'))
+            env = settings.get('validation_env')
+            if env is not None and (not isinstance(env, dict) or
+                                     any(not isinstance(k, str) or not re.fullmatch(r'[A-Z][A-Z0-9_]*', k) or
+                                         not isinstance(v, str) or len(v) > 512 for k, v in env.items())):
+                raise ConfigError('原生校验环境变量设置无效')
+        result = self.registry.add(settings, revision)
+        policy, command = self._build_install_bundle(result['device'], result['public_key'], settings)
+        return {**result, 'target_policy': policy, 'install_command': command}
 
     def bind(self, ident, space_id, revision):
         return self.registry.bind(ident, space_id, revision, self.spaces)
@@ -253,6 +316,12 @@ class DeviceManagement:
 
     def plan(self, ident, workspace_revision):
         with self.lock:
+            for release in self.releases['releases']:
+                if release['device_id'] == ident and release['status'] == 'running':
+                    try:
+                        self.status(release['id'])
+                    except ConfigError:
+                        pass
             row = self.registry.device(ident)
             if not row.get('space_id') or row.get('baseline') is None:
                 raise ConfigError('先读取并绑定设备配置')
@@ -266,9 +335,17 @@ class DeviceManagement:
                 raise ConfigError('设备配置已变化，请先重新读取并处理冲突')
             if _digest(native) == row.get('baseline_digest'):
                 raise ConfigError('当前空间与上次读取一致，无需发布')
+            now = time.time()
             for release in self.releases['releases']:
-                if release['device_id'] == ident and release['status'] in {'prepared', 'running'} and release['expires'] > time.time():
-                    raise ConfigError('此设备已有待确认或运行中的发布任务')
+                if release['device_id'] == ident and release['expires'] > now:
+                    if release['status'] == 'running':
+                        raise ConfigError('此设备已有待确认或运行中的发布任务')
+                    if release['status'] == 'prepared':
+                        if (release.get('revision') == workspace_revision and
+                                release.get('native_digest') == _digest(native) and
+                                release.get('baseline_digest') == _digest(current)):
+                            return self._public_release(release)
+                        release['expires'] = 0
             bundle, files, body = self._bundle(snapshot['profile'])
             refs = sorted(set(refs) | {name for name in files
                                        if name != 'mihomo.yaml' and not name.startswith('localdns/')})

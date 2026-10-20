@@ -1,19 +1,58 @@
 'use strict';
 // A device is an explicit target. Reading never publishes; publishing requires
 // a prepared release and a second, digest-bound confirmation.
-let deviceCatalog=null,deviceSerial=0,deviceBusy=false;
+let deviceCatalog=null,deviceSerial=0,deviceBusy=false,deviceCatalogLoading=false,releasePollTimer=null;
 const deviceSpaceName=ident=>spaceCatalog?.spaces?.find(item=>item.id===ident)?.name||'未绑定空间';
 const deviceDate=value=>value?new Date(value).toLocaleString('zh-CN'):'尚未读取';
 const deviceError=(element,error)=>{element.textContent=error.message;element.classList.add('is-error')};
+const boundDevice=(targetSpaceId=spaceId)=>(deviceCatalog?.devices||[]).find(item=>item.space_id&&item.space_id===targetSpaceId)||null;
+
+const deviceQuickSyncButton=document.createElement('button');
+deviceQuickSyncButton.id='device-quick-sync';deviceQuickSyncButton.type='button';deviceQuickSyncButton.className='button primary';deviceQuickSyncButton.hidden=true;
+$('#export').before(deviceQuickSyncButton);
+let mobileDeviceSyncButton=null;
+if($('.mobile-sidebar-actions')){
+  mobileDeviceSyncButton=document.createElement('button');mobileDeviceSyncButton.type='button';mobileDeviceSyncButton.className='button primary';mobileDeviceSyncButton.hidden=true;
+  $('.mobile-sidebar-actions').prepend(mobileDeviceSyncButton);
+}
+async function triggerQuickDeviceSync(button){
+  const bound=boundDevice(spaceId);if(!bound)return;
+  if(typeof setNavigation==='function')setNavigation(false);
+  if(bound.baseline_digest)await devicePlan(bound.id,button);
+  else await deviceRead(bound.id,button);
+}
+deviceQuickSyncButton.onclick=()=>triggerQuickDeviceSync(deviceQuickSyncButton);
+if(mobileDeviceSyncButton)mobileDeviceSyncButton.onclick=()=>triggerQuickDeviceSync(mobileDeviceSyncButton);
+
+function updateDeviceQuickSync(){
+  const globalPage=page==='sync',bound=boundDevice(spaceId);
+  if(deviceQuickSyncButton){
+    deviceQuickSyncButton.hidden=globalPage||!bound;
+    if(bound){
+      deviceQuickSyncButton.textContent=bound.baseline_digest?`发布到「${bound.name}」`:`读取「${bound.name}」`;
+      deviceQuickSyncButton.disabled=deviceBusy;
+    }
+  }
+  if(mobileDeviceSyncButton){
+    mobileDeviceSyncButton.hidden=globalPage||!bound;
+    if(bound)mobileDeviceSyncButton.textContent=bound.baseline_digest?`发布到「${bound.name}」`:`读取「${bound.name}」`;
+  }
+}
+
+function ensureDeviceCatalog(){
+  if(deviceCatalog!==null||deviceCatalogLoading||location.protocol==='file:')return;
+  deviceCatalogLoading=true;
+  api('/api/devices').then(result=>{deviceCatalog=result;updateDeviceQuickSync()}).catch(()=>{deviceCatalog={revision:0,devices:[]}}).finally(()=>{deviceCatalogLoading=false});
+}
 
 function renderDevicePage(){
-  $('#content').innerHTML=`<section class="panel device-panel" id="device-panel" aria-labelledby="device-heading"><div class="section-title"><div><h2 id="device-heading">指定服务器</h2><p>读取 Mihomo / LocalDNS 到独立配置空间，修改后在这里预检并发布。</p></div><button type="button" class="button" id="device-hermes" disabled>Hermes 接入</button></div><p class="device-status" id="device-list-status" role="status">正在读取设备列表…</p><div class="device-list" id="device-list"></div></section>`;
+  $('#content').innerHTML=`<section class="panel device-panel" id="device-panel" aria-labelledby="device-heading"><div class="section-title"><div><h2 id="device-heading">指定服务器</h2><p>读取 Mihomo / LocalDNS 到独立配置空间，修改后可在工作台顶栏或这里一键预检发布。</p></div><button type="button" class="button" id="device-hermes" disabled>Hermes 接入</button></div><p class="device-status" id="device-list-status" role="status">正在读取设备列表…</p><div class="device-list" id="device-list"></div></section>`;
   $('#create').disabled=true;$('#create').onclick=openDeviceSetup;
   const panel=$('#device-panel'),serial=++deviceSerial;
   panel.insertAdjacentHTML('beforeend',deviceServerGuide());
   api('/api/devices').then(result=>{
     if(!panel.isConnected||serial!==deviceSerial)return;
-    deviceCatalog=result;paintDeviceList(panel);
+    deviceCatalog=result;paintDeviceList(panel);updateDeviceQuickSync();
   }).catch(error=>{
     if(!panel.isConnected||serial!==deviceSerial)return;
     const status=$('#device-list-status',panel);deviceError(status,error);
@@ -29,6 +68,8 @@ render=function(){
   $('.breadcrumb').classList.toggle('device-global-view',globalPage);
   $('#export').hidden=globalPage;
   const subscription=$('#subscription-link');if(subscription)subscription.hidden=globalPage;
+  if(!globalPage)ensureDeviceCatalog();
+  updateDeviceQuickSync();
   if(globalPage){const footer=$$('.workspace-footer span');footer[0].textContent='设备同步 / Hermes 联动';footer[1].textContent='读取 → 编辑 → 预检 → 确认发布'}
 };
 
@@ -36,14 +77,15 @@ function paintDeviceList(panel=$('#device-panel')){
   if(!panel)return;
   const rows=deviceCatalog?.devices||[];
   $('.device-guide',panel).open=rows.length===0;
-  $('#device-list-status',panel).textContent=rows.length?`${rows.length} 台服务器 · 仅显示已登记目标`:'尚无服务器。先核对 SSH 主机指纹，再安装受限执行器。';
+  $('#device-list-status',panel).textContent=rows.length?`${rows.length} 台服务器 · 仅显示已登记目标`:'尚无服务器。先核对 SSH 主机指纹，再复制一键安装命令连接。';
   $('#device-list-status',panel).classList.remove('is-error');
   $('#create').disabled=false;
   $('#create').onclick=openDeviceSetup;
   $('#device-hermes',panel).disabled=false;
   $('#device-hermes',panel).onclick=openHermesAccess;
-  $('#device-list',panel).innerHTML=rows.map(row=>`<div class="device-row"><div class="device-row-main"><strong>${esc(row.name)}</strong><small>${esc(row.host)}:${row.port} · ${esc(row.manager)} · ${esc(deviceSpaceName(row.space_id))}</small><small>最近读取：${esc(deviceDate(row.last_read))} · ${row.baseline_digest?'已有比对基准':'尚无比对基准'}</small></div><div class="device-row-actions"><button type="button" class="button" data-device-probe="${esc(row.id)}">检查连接</button><button type="button" class="button" data-device-read="${esc(row.id)}">读取并比对</button><button type="button" class="button primary" data-device-plan="${esc(row.id)}" ${row.space_id&&row.baseline_digest?'':'disabled'}>发布预检</button><button type="button" class="text-button" data-device-history="${esc(row.id)}">发布记录</button></div></div>`).join('');
+  $('#device-list',panel).innerHTML=rows.map(row=>`<div class="device-row"><div class="device-row-main"><strong>${esc(row.name)}</strong><small>${esc(row.host)}:${row.port} · ${esc(row.manager)} · ${esc(deviceSpaceName(row.space_id))}</small><small>最近读取：${esc(deviceDate(row.last_read))} · ${row.baseline_digest?'已有比对基准':'尚无比对基准'}</small></div><div class="device-row-actions">${row.space_id?`<button type="button" class="button" data-device-open-space="${esc(row.id)}">去改配置</button>`:''}<button type="button" class="button" data-device-probe="${esc(row.id)}">检查连接</button><button type="button" class="button ${row.space_id&&row.baseline_digest?'':'primary'}" data-device-read="${esc(row.id)}">${row.space_id?'读取并比对':'读取并导入'}</button><button type="button" class="button primary" data-device-plan="${esc(row.id)}" ${row.space_id&&row.baseline_digest?'':'disabled'}>发布预检</button><button type="button" class="text-button" data-device-history="${esc(row.id)}">发布记录</button></div></div>`).join('');
   rows.forEach((row,index)=>{const actions=$$('.device-row-actions',panel)[index];if(row.space_id)actions.insertAdjacentHTML('beforeend',`<button type="button" class="text-button" data-device-unbind="${esc(row.id)}">解除绑定</button>`);else actions.insertAdjacentHTML('beforeend',`<button type="button" class="text-button" data-device-bind="${esc(row.id)}">绑定现有空间</button>`)});
+  $$('[data-device-open-space]',panel).forEach(button=>button.onclick=async()=>{const row=deviceCatalog.devices.find(item=>item.id===button.dataset.deviceOpenSpace);if(!row?.space_id)return;try{if(row.space_id!==spaceId)await switchSpace(row.space_id);location.hash='groups'}catch(error){toast(error.message)}});
   $$('[data-device-probe]',panel).forEach(button=>button.onclick=()=>deviceProbe(button.dataset.deviceProbe,button));
   $$('[data-device-read]',panel).forEach(button=>button.onclick=()=>deviceRead(button.dataset.deviceRead,button));
   $$('[data-device-plan]',panel).forEach(button=>button.onclick=()=>devicePlan(button.dataset.devicePlan,button));
@@ -66,44 +108,56 @@ function deviceUnbind(ident){
   $('#device-unbind-confirm').onclick=async event=>{event.target.disabled=true;try{await api(`/api/devices/${ident}/unbind`,{revision:deviceCatalog.revision});$('#dialog').close();await refreshDevices();toast('已解除绑定；设备配置未修改。')}catch(error){$('#device-unbind-error').textContent=error.message;event.target.disabled=false}};
 }
 
-async function refreshDevices(){deviceCatalog=await api('/api/devices');if(page==='sync')paintDeviceList()}
+async function refreshDevices(){deviceCatalog=await api('/api/devices');updateDeviceQuickSync();if(page==='sync')paintDeviceList()}
 async function deviceProbe(ident,button){
-  if(deviceBusy)return;deviceBusy=true;button.disabled=true;
+  if(deviceBusy)return;deviceBusy=true;button.disabled=true;updateDeviceQuickSync();
   try{const result=await api(`/api/devices/${ident}/probe`);toast(`执行器已连接 · Mihomo ${result.mihomo?'可用':'缺失'} · LocalDNS ${result.localdns?'可用':'缺失'}`)}
-  catch(error){toast(error.message)}finally{deviceBusy=false;button.disabled=false}
+  catch(error){toast(error.message)}finally{deviceBusy=false;button.disabled=false;updateDeviceQuickSync()}
 }
 
 function openDeviceSetup(){
-  showDialog('连接指定服务器',`<form id="device-setup-form" class="device-setup-form"><p class="notice">先在目标设备安装受限执行器。YoMesh 只保存设备专用 SSH 密钥，不保存 root 密码；发布前会核对设备指纹、逐文件差异和内核校验。</p><div class="fields"><label class="field">服务器名称<input name="name" maxlength="80" required placeholder="例如：家庭网关"></label><label class="field">IP 或主机名<input name="host" required placeholder="192.168.8.7"></label><label class="field">SSH 端口<input name="port" type="number" min="1" max="65535" value="22" required></label><label class="field">SSH 用户<input name="username" value="root" readonly></label></div><div class="filter-row"><button type="button" class="button" id="device-get-fingerprint">读取 SSH 主机指纹</button><span id="device-fingerprint-status" role="status">请在目标设备上独立核对指纹。</span></div><label class="field">已核对的 SSH 主机指纹<input name="host_key" pattern="SHA256:[A-Za-z0-9+/]{43}" required placeholder="SHA256:…"></label><label class="check-row"><input name="confirmed_host_key" type="checkbox" required> 我已在目标设备核对该指纹</label><fieldset><legend>Mihomo 路径</legend><div class="fields"><label class="field">工作目录<input name="mihomo_home" required placeholder="/etc/mihomo"></label><label class="field">主配置文件<input name="mihomo_config" required placeholder="/etc/mihomo/config.yaml"></label><label class="field">内核程序<input name="mihomo_binary" required placeholder="/usr/local/bin/mihomo"></label></div></fieldset><fieldset><legend>LocalDNS 路径</legend><div class="fields"><label class="field">配置根目录<input name="localdns_root" required placeholder="/opt/localdns"></label><label class="field">内核程序<input name="localdns_binary" required placeholder="/opt/localdns/localdns"></label></div></fieldset><fieldset><legend>服务与执行器</legend><div class="fields"><label class="field">服务管理<select name="manager"><option value="openrc">OpenRC</option><option value="systemd">systemd</option></select></label><label class="field">Mihomo 服务<input name="mihomo_service" required placeholder="mihomo"></label><label class="field">LocalDNS 服务<input name="localdns_service" required placeholder="localdns"></label><label class="field">执行器状态目录<input name="state_dir" required value="/var/lib/yomesh-executor"></label></div></fieldset><p class="error-message" id="device-setup-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button" id="device-setup-cancel">取消</button><button type="submit" class="button primary" id="device-setup-submit">生成设备密钥</button></div></form>`);
-  $('#device-setup-form>.notice').textContent='先填写服务器信息并生成设备密钥，再按下一步下载文件、安装受限执行器。YoMesh 只保存设备专用 SSH 密钥，不保存 root 密码。';
-  $('#device-setup-form>.notice').insertAdjacentHTML('afterend','<p class="device-prerequisites">目标服务器需已安装并运行 Mihomo / LocalDNS，且具备 Python 3.11+、SSH 与 OpenRC / systemd。空白机器请先准备内核、初始配置和服务，再在这里登记。</p>'+deviceServerGuide());
-  $('#device-setup-form fieldset:last-of-type').insertAdjacentHTML('beforeend','<details class="advanced-options"><summary>校验程序所需环境变量</summary><label class="field">JSON 对象<textarea name="validation_env" rows="3" spellcheck="false">{}</textarea><small>例如 LocalDNS 依赖 LD_PRELOAD 时填写对应路径；只用于设备上的原生校验。</small></label></details>');
+  showDialog('连接指定服务器',`<form id="device-setup-form" class="device-setup-form"><p class="notice">先填写服务器名称与 IP 并生成设备密钥，下一步即可复制一行命令在目标服务器完成受限执行器安装。YoMesh 不保存 root 密码。</p><p class="device-prerequisites">目标服务器需已安装并运行 Mihomo / LocalDNS，且具备 Python 3.11+、SSH 与 OpenRC / systemd。</p>${deviceServerGuide()}<div class="fields"><label class="field">服务器名称<input name="name" maxlength="80" required placeholder="例如：家庭网关"></label><label class="field">IP 或主机名<input name="host" required placeholder="192.168.8.7"></label><label class="field">SSH 端口<input name="port" type="number" min="1" max="65535" value="22" required></label><label class="field">SSH 用户<input name="username" value="root" readonly></label></div><div class="filter-row"><button type="button" class="button" id="device-get-fingerprint">读取 SSH 主机指纹</button><span id="device-fingerprint-status" role="status">填写 IP 后可点击读取，并在目标设备核对。</span></div><label class="field">已核对的 SSH 主机指纹<input name="host_key" pattern="SHA256:[A-Za-z0-9+/]{43}" required placeholder="SHA256:…"></label><label class="check-row"><input name="confirmed_host_key" type="checkbox" required> 我已在目标设备核对该指纹</label><details class="advanced-options device-advanced-paths"><summary>路径与服务设置（已预填标准路径，安装时支持自动识别）</summary><fieldset><legend>Mihomo 路径</legend><div class="fields"><label class="field">工作目录<input name="mihomo_home" required value="/etc/mihomo" placeholder="/etc/mihomo"></label><label class="field">主配置文件<input name="mihomo_config" required value="/etc/mihomo/config.yaml" placeholder="/etc/mihomo/config.yaml"></label><label class="field">内核程序<input name="mihomo_binary" required value="/usr/local/bin/mihomo" placeholder="/usr/local/bin/mihomo"></label></div></fieldset><fieldset><legend>LocalDNS 路径</legend><div class="fields"><label class="field">配置根目录<input name="localdns_root" required value="/opt/localdns" placeholder="/opt/localdns"></label><label class="field">内核程序<input name="localdns_binary" required value="/opt/localdns/localdns" placeholder="/opt/localdns/localdns"></label></div></fieldset><fieldset><legend>服务与执行器</legend><div class="fields"><label class="field">服务管理<select name="manager"><option value="systemd" selected>systemd（或安装时自动识别）</option><option value="openrc">OpenRC</option></select></label><label class="field">Mihomo 服务<input name="mihomo_service" required value="mihomo" placeholder="mihomo"></label><label class="field">LocalDNS 服务<input name="localdns_service" required value="localdns" placeholder="localdns"></label><label class="field">执行器状态目录<input name="state_dir" required value="/var/lib/yomesh-executor"></label></div><details class="advanced-options"><summary>校验程序所需环境变量</summary><label class="field">JSON 对象<textarea name="validation_env" rows="3" spellcheck="false">{}</textarea><small>例如 LocalDNS 依赖 LD_PRELOAD 时填写对应路径；只用于设备上的原生校验。</small></label></details></fieldset></details><p class="error-message" id="device-setup-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button" id="device-setup-cancel">取消</button><button type="submit" class="button primary" id="device-setup-submit">生成设备密钥并获取安装命令</button></div></form>`);
+  const form=$('#device-setup-form');
+  let configTouched=false;
+  form.elements.mihomo_config.addEventListener('input',()=>{configTouched=true});
+  form.elements.mihomo_home.addEventListener('input',()=>{
+    if(!configTouched){
+      const base=form.elements.mihomo_home.value.trim().replace(/\/+$/,'')||'/etc/mihomo';
+      form.elements.mihomo_config.value=base+'/config.yaml';
+    }
+  });
   $('#device-setup-cancel').onclick=()=>$('#dialog').close();
-  $('#device-get-fingerprint').onclick=async()=>{
-    const form=$('#device-setup-form'),host=form.elements.host.value.trim(),port=Number(form.elements.port.value),status=$('#device-fingerprint-status');
+  const readFingerprint=async()=>{
+    const host=form.elements.host.value.trim(),port=Number(form.elements.port.value),status=$('#device-fingerprint-status');
     if(!host||!port){status.textContent='先填写服务器地址和端口。';return}
     status.textContent='正在读取指纹…';
     try{const result=await api('/api/devices/host-key',{host,port});form.elements.host_key.value=result.fingerprint;form.elements.confirmed_host_key.checked=false;status.textContent='已读取；请与服务器本机指纹核对后勾选。'}
     catch(error){status.textContent=error.message}
   };
-  $('#device-setup-form').onsubmit=async event=>{
+  $('#device-get-fingerprint').onclick=readFingerprint;
+  form.elements.host.addEventListener('blur',()=>{if(form.elements.host.value.trim()&&!form.elements.host_key.value.trim())readFingerprint()});
+  form.onsubmit=async event=>{
     event.preventDefault();if(deviceBusy)return;
-    const form=event.currentTarget,values=Object.fromEntries(new FormData(form)),error=$('#device-setup-error');
-    const settings={name:values.name.trim(),host:values.host.trim(),port:Number(values.port),username:'root',host_key:values.host_key.trim(),mihomo_home:values.mihomo_home.trim(),mihomo_config:values.mihomo_config.trim(),mihomo_binary:values.mihomo_binary.trim(),localdns_root:values.localdns_root.trim(),localdns_binary:values.localdns_binary.trim(),manager:values.manager,services:{mihomo:values.mihomo_service.trim(),localdns:values.localdns_service.trim()}};
+    const values=Object.fromEntries(new FormData(form)),error=$('#device-setup-error');
     let validationEnv;try{validationEnv=JSON.parse(values.validation_env||'{}');if(!validationEnv||Array.isArray(validationEnv)||typeof validationEnv!=='object')throw Error()}catch{error.textContent='校验环境变量需要 JSON 对象。';return}
     if(Object.entries(validationEnv).some(([key,value])=>!/^[A-Z][A-Z0-9_]*$/.test(key)||typeof value!=='string'||value.length>512)){error.textContent='校验环境变量只能使用大写名称与 512 字符以内的字符串值。';return}
     if(!values.state_dir.startsWith('/')||values.state_dir.split('/').includes('..')){error.textContent='执行器状态目录需要设备上的绝对路径。';return}
+    const stateDir=values.state_dir.trim();
+    const settings={name:values.name.trim(),host:values.host.trim(),port:Number(values.port),username:'root',host_key:values.host_key.trim(),mihomo_home:values.mihomo_home.trim(),mihomo_config:values.mihomo_config.trim(),mihomo_binary:values.mihomo_binary.trim(),localdns_root:values.localdns_root.trim(),localdns_binary:values.localdns_binary.trim(),manager:values.manager,services:{mihomo:values.mihomo_service.trim(),localdns:values.localdns_service.trim()},state_dir:stateDir,validation_env:validationEnv};
     deviceBusy=true;$('#device-setup-submit').disabled=true;error.textContent='';
-    try{const result=await api('/api/devices',{device:settings,revision:deviceCatalog.revision});await refreshDevices();showDeviceInstall(result,settings,values.state_dir.trim(),validationEnv)}
+    try{const result=await api('/api/devices',{device:settings,revision:deviceCatalog.revision});await refreshDevices();showDeviceInstall(result,settings,stateDir,validationEnv)}
     catch(reason){error.textContent=reason.message;$('#device-setup-submit').disabled=false}
-    finally{deviceBusy=false}
+    finally{deviceBusy=false;updateDeviceQuickSync()}
   };
 }
 
 async function deviceRead(ident,button){
-  if(deviceBusy)return;deviceBusy=true;button.disabled=true;
+  if(deviceBusy)return;deviceBusy=true;if(button)button.disabled=true;updateDeviceQuickSync();
   try{
-    if(dirty()||dnsEdited)throw Error('当前仍有未保存的配置草稿，请先保存或取消，再读取设备。');
+    if(dirty()||dnsEdited){
+      if(typeof saveSpaceDrafts==='function')await saveSpaceDrafts();
+      else throw Error('当前仍有未保存的配置草稿，请先保存或取消，再读取设备。');
+    }
     const result=await api(`/api/devices/${ident}/preview-pull`),row=deviceCatalog.devices.find(item=>item.id===ident);
     const parity=row.space_id?(result.different?'参与发布的配置与当前空间不同。':'参与发布的配置与当前空间一致。'):'尚未绑定配置空间；可导入设备当前配置。';
     const runtime=result.runtime_generated_changed?`<p class="notice">LocalDNS 自动生成表有 ${result.runtime_generated_changed_files} 个文件已变化。可更新工作台快照；这些文件不参与发布冲突检查。</p>`:'';
@@ -116,19 +170,22 @@ async function deviceRead(ident,button){
       deviceBusy=true;event.target.disabled=true;
       try{const pulled=await api(`/api/devices/${ident}/pull`,{remote_digest:result.remote_digest,workspace_revision:result.workspace_revision,replace});$('#dialog').close();await refreshDevices();if(pulled.space_id!==spaceId)await switchSpace(pulled.space_id);else await reloadWorkspace();toast('已读取到独立配置空间；设备尚未被修改。')}
       catch(error){$('#device-read-error').textContent=error.message;event.target.disabled=false}
-      finally{deviceBusy=false}
+      finally{deviceBusy=false;updateDeviceQuickSync()}
     };
-  }catch(error){toast(error.message)}finally{deviceBusy=false;button.disabled=false}
+  }catch(error){toast(error.message)}finally{deviceBusy=false;if(button)button.disabled=false;updateDeviceQuickSync()}
 }
 
 async function devicePlan(ident,button){
-  if(deviceBusy)return;deviceBusy=true;button.disabled=true;
+  if(deviceBusy)return;deviceBusy=true;if(button)button.disabled=true;updateDeviceQuickSync();
   try{
-    if(dirty()||dnsEdited)throw Error('当前仍有未保存的配置草稿，请先保存或取消，再预检发布。');
+    if(dirty()||dnsEdited){
+      if(typeof saveSpaceDrafts==='function')await saveSpaceDrafts();
+      else throw Error('当前仍有未保存的配置草稿，请先保存或取消，再预检发布。');
+    }
     const row=deviceCatalog.devices.find(item=>item.id===ident),snapshot=await api('/api/workspace',undefined,row.space_id);
     const release=await api(`/api/devices/${ident}/plan`,{workspace_revision:snapshot.revision});
     showDeviceRelease(release);
-  }catch(error){toast(error.message)}finally{deviceBusy=false;button.disabled=false}
+  }catch(error){toast(error.message)}finally{deviceBusy=false;if(button)button.disabled=false;updateDeviceQuickSync()}
 }
 
 function deviceValidationLabel(value){
@@ -136,20 +193,40 @@ function deviceValidationLabel(value){
 }
 
 function showDeviceRelease(release){
+  clearTimeout(releasePollTimer);releasePollTimer=null;
   const prepared=release.status==='prepared',running=release.status==='running',success=release.status==='succeeded';
-  const stateLabels={prepared:'预检通过，等待确认',running:'正在应用并检查服务',succeeded:'发布成功',rolled_back:'已回滚',conflict:'设备配置发生冲突',failed:'发布失败',needs_manual_recovery:'自动回滚未完成，需要人工恢复'};
-  showDialog('设备发布 · '+release.device_name,`<div class="device-release"><p class="device-status" id="device-release-state" role="status">${esc(stateLabels[release.status]||release.status)}</p><p>目标服务器：${esc(release.device_name)} · 配置空间：${esc(deviceSpaceName(release.space_id))}</p><p class="preview-note">发布包 SHA-256：<code>${esc(release.bundle_sha256)}</code></p><p>设备原生校验：Mihomo ${esc(deviceValidationLabel(release.validation?.mihomo))} · LocalDNS ${esc(deviceValidationLabel(release.validation?.localdns||'不适用'))}</p><details open><summary>逐文件差异（${release.changes.length}）</summary><ul class="device-preview-list">${release.changes.map(item=>`<li>${esc(item.file)} · ${item.before?item.after?'修改':'删除':'新增'}</li>`).join('')}</ul></details><p class="error-message" id="device-release-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button" id="device-release-close">关闭</button>${prepared?'<button type="button" class="button primary" id="device-release-approve">确认发布到这台服务器</button>':''}${success?'<button type="button" class="button danger-button" id="device-release-rollback">回滚此次发布</button>':''}${running?'<button type="button" class="button" id="device-release-refresh">刷新状态</button>':''}</div></div>`);
-  $('#device-release-close').onclick=()=>$('#dialog').close();
+  const stateLabels={prepared:'预检通过，等待确认',running:'正在应用并检查服务（自动刷新中…）',succeeded:'发布成功',rolled_back:'已回滚',conflict:'设备配置发生冲突',failed:'发布失败',needs_manual_recovery:'自动回滚未完成，需要人工恢复'};
+  showDialog('设备发布 · '+release.device_name,`<div class="device-release" data-release-id="${esc(release.id)}"><p class="device-status" id="device-release-state" role="status">${esc(stateLabels[release.status]||release.status)}</p><p>目标服务器：${esc(release.device_name)} · 配置空间：${esc(deviceSpaceName(release.space_id))}</p><p class="preview-note">发布包 SHA-256：<code>${esc(release.bundle_sha256)}</code></p><p>设备原生校验：Mihomo ${esc(deviceValidationLabel(release.validation?.mihomo))} · LocalDNS ${esc(deviceValidationLabel(release.validation?.localdns||'不适用'))}</p><details open><summary>逐文件差异（${release.changes.length}）</summary><ul class="device-preview-list">${release.changes.map(item=>`<li>${esc(item.file)} · ${item.before?item.after?'修改':'删除':'新增'}</li>`).join('')}</ul></details><p class="error-message" id="device-release-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button" id="device-release-close">关闭</button>${prepared?'<button type="button" class="button primary" id="device-release-approve">确认发布到这台服务器</button>':''}${success?'<button type="button" class="button danger-button" id="device-release-rollback">回滚此次发布</button>':''}${running?'<button type="button" class="button" id="device-release-refresh">立即刷新状态</button>':''}</div></div>`);
+  $('#device-release-close').onclick=()=>{clearTimeout(releasePollTimer);$('#dialog').close()};
   if(prepared)$('#device-release-approve').onclick=async event=>{
     event.target.disabled=true;
-    try{const current=await api(`/api/devices/releases/${release.id}/approve`,{device_id:release.device_id,bundle_sha256:release.bundle_sha256,workspace_revision:release.revision});showDeviceRelease(current)}
+    try{const current=await api(`/api/devices/releases/${release.id}/approve`,{device_id:release.device_id,bundle_sha256:release.bundle_sha256,workspace_revision:release.revision});showDeviceRelease(current);if(current.status==='succeeded'){await refreshDevices();toast(`已发布到「${release.device_name}」并更新同步基准。`)}}
     catch(error){$('#device-release-error').textContent=error.message;event.target.disabled=false}
   };
-  if(running)$('#device-release-refresh').onclick=async event=>{
-    event.target.disabled=true;
-    try{const current=await api(`/api/devices/releases/${release.id}/status`,{});showDeviceRelease(current);if(current.status==='succeeded')await refreshDevices()}
-    catch(error){$('#device-release-error').textContent=error.message;event.target.disabled=false}
+  const pollStatus=async()=>{
+    if(!$('#dialog').open||$('.device-release')?.dataset.releaseId!==release.id)return;
+    try{
+      const current=await api(`/api/devices/releases/${release.id}/status`,{});
+      if(!$('#dialog').open||$('.device-release')?.dataset.releaseId!==release.id)return;
+      if(current.status!=='running'){
+        showDeviceRelease(current);
+        await refreshDevices();
+        if(current.status==='succeeded')toast(`已发布到「${release.device_name}」并更新同步基准。`);
+      }else{
+        releasePollTimer=setTimeout(pollStatus,1200);
+      }
+    }catch(error){
+      if($('#device-release-error'))$('#device-release-error').textContent=error.message;
+      const btn=$('#device-release-refresh');if(btn)btn.disabled=false;
+    }
   };
+  if(running){
+    releasePollTimer=setTimeout(pollStatus,1200);
+    $('#device-release-refresh').onclick=async event=>{
+      clearTimeout(releasePollTimer);event.target.disabled=true;
+      await pollStatus();
+    };
+  }
   if(success)$('#device-release-rollback').onclick=async event=>{
     event.target.disabled=true;
     try{const current=await api(`/api/devices/releases/${release.id}/rollback`,{});showDeviceRelease(current);await refreshDevices()}

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yomesh"
-version = "0.16.3"
+version = "0.16.4"
 description = "Shared proxy policy compiler for Mihomo, sing-box and MosDNS"
 requires-python = ">=3.11"
 dependencies = ["PyYAML==6.0.3", "paramiko==5.0.0"]

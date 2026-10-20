@@ -1,6 +1,6 @@
 # YoMesh
 
-代理配置工作台，以同一份 Profile 管理 Mihomo / sing-box 代理配置与独立 DNS。当前版本 **0.16.3**，界面主要使用中文。
+代理配置工作台，以同一份 Profile 管理 Mihomo / sing-box 代理配置与独立 DNS。当前版本 **0.16.4**，界面主要使用中文。
 
 ## 功能
 

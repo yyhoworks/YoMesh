@@ -167,6 +167,37 @@ class DeviceReadTests(unittest.TestCase):
         result = self.manager.pull(self.ident, preview["remote_digest"], preview["workspace_revision"], replace=True)
         self.assertEqual(result["space_id"], imported["id"])
 
+    def test_minimal_device_add_uses_defaults_and_returns_one_line_install_command(self):
+        added = self.manager.add({"name": "极简登记网关", "host": "192.0.2.88", "host_key": "SHA256:" + "B" * 43},
+                                 self.registry.listing()["revision"])
+        device = added["device"]
+        self.assertEqual(device["mihomo_home"], "/etc/mihomo")
+        self.assertEqual(device["mihomo_config"], "/etc/mihomo/config.yaml")
+        self.assertEqual(device["mihomo_binary"], "/usr/local/bin/mihomo")
+        self.assertEqual(device["localdns_root"], "/opt/localdns")
+        self.assertEqual(device["localdns_binary"], "/opt/localdns/localdns")
+        self.assertEqual(device["manager"], "systemd")
+        self.assertEqual(device["services"], {"mihomo": "mihomo", "localdns": "localdns"})
+        self.assertEqual(added["target_policy"]["format"], "yomesh-executor-v1")
+        self.assertIn("python3 -c '", added["install_command"])
+        self.assertNotIn("\n", added["install_command"])
+
+    def test_plan_reuses_same_prepared_release_and_supersedes_after_edit(self):
+        preview = self.manager.preview_pull(self.ident)
+        space_id = self.manager.pull(self.ident, preview["remote_digest"])["space_id"]
+        snapshot = self.spaces.workspace_snapshot(space_id)
+        snapshot["profile"]["native_configuration"]["mihomo"]["mixed-port"] = 17891
+        first_save = self.spaces.save_profile(snapshot["profile"], snapshot["revision"], space_id)
+        first_plan = self.manager.plan(self.ident, first_save["revision"])
+        repeated_plan = self.manager.plan(self.ident, first_save["revision"])
+        self.assertEqual(repeated_plan["id"], first_plan["id"])
+
+        first_save["profile"]["native_configuration"]["mihomo"]["mixed-port"] = 17892
+        second_save = self.spaces.save_profile(first_save["profile"], first_save["revision"], space_id)
+        second_plan = self.manager.plan(self.ident, second_save["revision"])
+        self.assertNotEqual(second_plan["id"], first_plan["id"])
+        self.assertEqual(second_plan["status"], "prepared")
+
 
 class DeviceApiAuthTests(unittest.TestCase):
     def test_unprotected_workbench_cannot_manage_devices(self):
