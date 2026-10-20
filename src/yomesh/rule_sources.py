@@ -94,15 +94,22 @@ def singbox_entries(value):
                 raise ConfigError("规则文件包含 AND / 取反逻辑，请在分流规则的条件组中编排；未导入")
             return [entry for child in rule["rules"] for entry in convert(child)]
         keys = set(rule) - {"type"}
-        if len(keys) != 1 or not keys.issubset(names) or rule.get("type", "default") != "default":
+        domain_keys = {"domain", "domain_suffix", "domain_keyword", "domain_regex"}
+        # sing-box 1.14.3 combines the domain matcher family with OR. Other
+        # families remain AND; never flatten a domain + IP combination.
+        if not keys or not keys.issubset(names) or (len(keys) > 1 and not keys.issubset(domain_keys)) or rule.get("type", "default") != "default":
             raise ConfigError("规则文件含未支持的字段或多字段 AND；不能作为普通规则集展开")
-        key = next(iter(keys))
-        values = rule[key]
-        if isinstance(values, str):
-            values = [values]
-        if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
-            raise ConfigError("sing-box 规则内容需要文本数组")
-        return [("IP-CIDR6" if key == "ip_cidr" and ":" in item else names[key]) + "," + item for item in values]
+        entries = []
+        for key in rule:
+            if key == "type":
+                continue
+            values = rule[key]
+            if isinstance(values, str):
+                values = [values]
+            if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
+                raise ConfigError("sing-box 规则内容需要文本数组")
+            entries.extend(("IP-CIDR6" if key == "ip_cidr" and ":" in item else names[key]) + "," + item for item in values)
+        return entries
 
     return [entry for rule in value["rules"] for entry in convert(rule)]
 

@@ -14,6 +14,14 @@
 .mosdns-actions .error-message:empty { display:none; }
 .mosdns-code { font-family:Consolas,monospace; font-size:12px; tab-size:2; }
 .mosdns-section hr { border:0; border-top:1px solid var(--line); margin:24px 0; }
+.mosdns-paged .filter-row { align-items:end; }
+.mosdns-paged .filter-row .field { flex:1; min-width:160px; }
+.mosdns-paged>p { margin:0; color:var(--muted); }
+.mosdns-migration dl { margin:16px 0; }
+.mosdns-migration dl>div { padding:12px 0; border-top:1px solid var(--line); }
+.mosdns-migration dt { font-weight:600; }
+.mosdns-migration dd { margin:8px 0 0; color:var(--muted); overflow-wrap:anywhere; }
+.mosdns-section details>summary { cursor:pointer; }
 @media(max-width:700px) {
  .mosdns-section { padding:16px; }
  .mosdns-tabs { flex-wrap:nowrap; overflow-x:auto; padding-bottom:4px; }

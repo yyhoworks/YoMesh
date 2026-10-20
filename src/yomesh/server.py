@@ -293,10 +293,17 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 if self.path == "/api/workspace/settings":
                     self.json_response(200, spaces.save_settings(request.get("settings"), request.get("revision"), scope))
                     return
-                if self.path in {"/api/workspace/mosdns/save", "/api/workspace/mosdns/preview", "/api/workspace/mosdns/check", "/api/workspace/mosdns/refresh"}:
+                if self.path in {"/api/workspace/mosdns/import", "/api/workspace/mosdns/import-localdns", "/api/workspace/mosdns/save", "/api/workspace/mosdns/preview", "/api/workspace/mosdns/check", "/api/workspace/mosdns/refresh"}:
                     from .mosdns import checked, refresh_rule, refresh_ip_source
                     workspace._revision(request.get("revision"))
                     profile = spaces.workspace_snapshot(scope)["profile"]
+                    if self.path.endswith("/import-localdns"):
+                        from .mosdns_import import import_localdns
+                        self.json_response(200, import_localdns(profile, root))
+                        return
+                    if self.path.endswith("/import"):
+                        self.json_response(200, {"settings": checked(request.get("config"), profile.get("settings")), "note": "已读取到草稿，尚未保存"})
+                        return
                     if self.path.endswith("/refresh"):
                         from copy import deepcopy
                         profile["mosdns"] = deepcopy(request.get("config"))

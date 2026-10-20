@@ -24,7 +24,7 @@ def defaults(settings=None):
                        for k in GROUPS},
             "block_aaaa": False, "blocked_qtypes": [], "ttl_min": 0, "ttl_max": 0,
             "hosts": [], "rules": [], "fallback": {"enabled": False, "primary": "local", "secondary": "remote", "threshold": 500, "always_standby": False, "response_ips": [], "sources": []},
-            "mode": "form", "custom_config": None}
+            "mode": "form", "custom_config": None, "migration": None}
 
 
 def _error(message):
@@ -113,6 +113,16 @@ def checked(value, settings=None):
     base = defaults(settings)
     _keys(value, base, "配置")
     cfg = {**base, **deepcopy(value)}
+    migration = cfg["migration"]
+    if migration is not None:
+        _keys(migration, {"source", "reviewed", "items"}, "迁移报告")
+        if migration.get("source") != "LocalDNS" or not isinstance(migration.get("items"), list) or len(migration["items"]) > 512:
+            _error("迁移报告来源或条目无效")
+        _boolean(migration.get("reviewed"), "迁移报告确认状态")
+        for item in migration["items"]:
+            _keys(item, {"name", "detail", "status"}, "迁移条目")
+            if item.get("status") not in {"mapped", "review", "unsupported"} or any(not isinstance(item.get(k), str) or not item[k].strip() or len(item[k]) > limit for k, limit in (("name", 100), ("detail", 1000))):
+                _error("迁移条目内容无效")
     if cfg["mode"] not in {"form", "custom"}:
         _error("编辑模式无效")
     if cfg["mode"] == "custom":
@@ -372,6 +382,9 @@ def compile_config(value):
 
 def bundle(value, rule_output="inline"):
     from .rule_output import externalize_dns
+    migration = checked(value["mosdns"])["migration"]
+    if migration and not migration["reviewed"]:
+        _error("请先在迁移报告中核对停用规则与未迁移项，再确认校验和导出；可以先保存草稿")
     config = compile_config(value["mosdns"])
     files = {}
     if rule_output != "inline" and checked(value["mosdns"])["mode"] != "custom":
@@ -381,7 +394,9 @@ def bundle(value, rule_output="inline"):
     files["cache/.keep"] = ""
     files["README.txt"] = "MosDNS 5.3.4 独立配置。\n在包目录执行 mosdns start -c mosdns.yaml -d .\n规则使用工作台已保存快照；刷新后重新导出。cache/ 需可写。\n未验证目标设备的端口、外部上游或 SOCKS 可达性。\n"
     mode = "native" if checked(value["mosdns"])["mode"] == "custom" else "inline" if rule_output == "inline" else "local"
-    return {"files": files, "manifest": {"format": "yomesh-bundle-v1", "component": "dns", "proxy": "mihomo", "dns_engine": "mosdns", "versions": {"mosdns": "5.3.4"}, "rule_output": {"mode": mode}, "validation": {"status": "not-run"}, "startup_order": ["mosdns"], "diagnostics": [], "note": "MosDNS 独立配置；原生检查仅验证插件和隔离监听。"}}
+    if migration:
+        files["migration-report.json"] = deepcopy(migration)
+    return {"files": files, "manifest": {"format": "yomesh-bundle-v1", "component": "dns", "proxy": "mihomo", "dns_engine": "mosdns", "versions": {"mosdns": "5.3.4"}, "rule_output": {"mode": mode}, "validation": {"status": "not-run"}, "startup_order": ["mosdns"], "diagnostics": [item["name"] + "：" + item["detail"] for item in migration["items"] if item["status"] != "mapped"] if migration else [], "note": "MosDNS 独立配置；原生检查仅验证插件和隔离监听。"}}
 
 
 def refresh_rule(root, rule):

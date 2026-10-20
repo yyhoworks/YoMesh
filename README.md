@@ -1,6 +1,6 @@
 # YoMesh
 
-代理配置工作台，以同一份 Profile 管理 Mihomo / sing-box 代理配置与独立 MosDNS。当前版本 **0.15.0**，界面主要使用中文。
+代理配置工作台，以同一份 Profile 管理 Mihomo / sing-box 代理配置与独立 MosDNS。当前版本 **0.15.1**，界面主要使用中文。
 
 ## 功能
 
@@ -12,6 +12,7 @@
 - 域名和响应 IP 来源可按间隔刷新；失败保留上次有效快照。部署后的 MosDNS 使用导出包，刷新后需重新导出和部署。
 - 原生 Mihomo 空间保留未知字段与复杂规则，不擅自转换成 sing-box。可另存独立 MosDNS，也可保留已有 LocalDNS 原件。
 - 预览、校验与导出使用同一后端模型；下载前使用锁定版本的实际内核验证。
+- 已保存的 LocalDNS 原件可直接生成 MosDNS 表单草稿，附转换报告；也支持设置 JSON 文件或粘贴导入。大型规则快照按段编辑、搜索，保存时完整保留其他条件。
 
 ## 本地运行（Windows）
 
@@ -65,7 +66,7 @@ python scripts/yomesh.py export examples/profile.json --component dns --output o
 python -m unittest discover -s tests -v
 ```
 
-项目已有 222 项测试，覆盖原生加载、规则语义、隔离 DNS 查询、HTTP API、持久化与回滚。可选 LocalDNS 的测试会在对应程序未安装或平台不支持时明确跳过。内核加载与本机测试不代表真实订阅、外部节点、设备接管或上游连通性已验证。
+项目已有 226 项测试，覆盖原生加载、规则语义、隔离 DNS 查询、HTTP API、迁移报告、持久化与回滚。可选 LocalDNS 的测试会在对应程序未安装或平台不支持时明确跳过。内核加载与本机测试不代表真实订阅、外部节点、设备接管或上游连通性已验证。
 
 更多说明：[兼容约定](docs/compatibility.md) · [架构](docs/architecture.md) · [规则工作台](docs/rule-workbench.md) · [MosDNS 能力边界](docs/mosdns-localdns-gap-analysis.md) · [发布隐私说明](docs/privacy.md)。
 
