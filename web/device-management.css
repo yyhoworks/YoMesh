@@ -1,4 +1,5 @@
-.device-panel{margin-top:24px;padding:24px;border:1px solid var(--line)}
+.device-panel{padding:24px;border:1px solid var(--line)}
+.device-global-view>.space-switcher,.device-global-view>#edit-current-space,.device-global-view>span{display:none}
 .device-panel .section-title{align-items:flex-start;gap:16px}
 .device-panel h2{margin:0;font-size:20px}
 .device-panel .section-title p{margin:5px 0 0;color:var(--muted);font-size:12px}
@@ -21,4 +22,21 @@
 .device-preview-list li{margin:5px 0}
 .device-status{margin:12px 0;color:var(--muted);font-size:14px}
 .device-status.is-error{color:var(--red)}
+.device-guide{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.device-guide>summary{cursor:pointer;color:var(--accent-ink);font-size:14px}
+.device-steps{margin:18px 0;padding-left:24px;max-width:75ch}
+.device-steps>li{padding-left:5px;margin:0 0 26px}
+.device-steps>li:last-child{margin-bottom:0}
+.device-steps>li::marker{color:var(--muted);font-variant-numeric:tabular-nums}
+.device-steps>li>strong{font-size:14px;color:var(--ink)}
+.device-steps p,.device-prerequisites{font-size:14px;line-height:1.75;overflow-wrap:anywhere}
+.device-steps p{margin:8px 0 12px;color:var(--muted)}
+.device-steps p strong{color:var(--ink)}
+.device-steps code{overflow-wrap:anywhere}
+.device-guide pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 Consolas,monospace}
+.device-install textarea{font:12px/1.6 Consolas,monospace;overflow-wrap:anywhere}
+.setup-downloads{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.setup-downloads a.button,.device-steps a.button{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+.hermes-setup .dialog-actions{position:sticky;bottom:-26px;background:var(--solid);padding:14px 0;margin-bottom:-26px;border-top:1px solid var(--line);z-index:1}
+@media(max-width:780px){.device-install textarea,.hermes-setup input{font-size:16px}.device-install .button,.device-guide summary{min-height:44px}.hermes-setup .dialog-actions{bottom:-16px;margin-bottom:-16px;flex-wrap:wrap}.device-steps{padding-left:20px}}
 @media(max-width:780px){.device-panel{padding:16px}.device-panel .section-title,.device-row{flex-direction:column}.device-row-actions{width:100%;justify-content:flex-start}.device-row-actions .button,.device-row-actions .text-button,.device-panel .section-title>.button{min-height:44px}.device-setup-form input,.device-setup-form select{font-size:16px}.device-setup-form .dialog-actions{bottom:-16px;margin-bottom:-16px}.device-setup-form .dialog-actions .button{min-height:44px}}

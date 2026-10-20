@@ -168,6 +168,23 @@ def handler_for(root: Path, port: int, public_hosts=()):
             if self.path.startswith("/api/") and self.authenticated_user() is None:
                 self.json_response(401, {"error": "请先登录 YoMesh 工作台", "auth_required": True, "username": auth.current_username()})
                 return
+            if self.path.startswith("/api/setup/"):
+                name = self.path.removeprefix("/api/setup/")
+                if name not in {"device_installer.py", "device_executor.py", "yomesh_hermes_mcp.py"}:
+                    self.json_response(404, {"error": "安装文件不存在"})
+                    return
+                try:
+                    raw = (root / "scripts" / name).read_bytes()
+                except OSError:
+                    self.json_response(503, {"error": "安装文件暂不可用，请检查 YoMesh 安装目录中的 scripts 文件夹"})
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+                return
             if self.path == "/api/spaces":
                 self.json_response(200, spaces.snapshot())
                 return

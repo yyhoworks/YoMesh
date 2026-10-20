@@ -2,6 +2,7 @@
 // Spaces select shared resources and keep their own generation settings.
 Object.assign(pages, {
   spaces:['配置空间','为手机、电脑或网关保存独立配置，按需复制、调整和生成。','新建配置空间'],
+  sync:['设备同步','连接指定服务器，读取原生配置、预检发布，并配置 Hermes 联动。','连接服务器'],
   inbounds:['入站','管理接收连接的协议、监听端口与连接参数。','添加入站'],
   dns:['MosDNS','设置当前配置空间的 DNS 上游、监听与分流解析。','']
 });
@@ -13,6 +14,7 @@ pages.policies[0]='分流顺序';
 pages.policies[1]='从上到下依次匹配，拖动调整，兜底固定最后。';
 Object.assign(iconPaths,{
   spaces:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
+  sync:'M4 7h14M14 3l4 4-4 4M20 17H6M10 13l-4 4 4 4',
   inbounds:'M14 4h6v16h-6M3 12h12M10 7l5 5-5 5',
   dns:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M3 12h18M12 3c4 4 4 14 0 18M12 3c-4 4-4 14 0 18'
 });
@@ -23,7 +25,7 @@ let spaceSwitchBusy=false, spaceListSerial=0,moreNavigationOpen=false;
 nav=function(){
   const countFor=p=>p==='spaces'?spaceCatalog?.spaces?.length:Array.isArray(data[p])?data[p].length:undefined;
   const link=p=>{const c=countFor(p);return `<a href="#${p}" class="nav-item ${page===p?'active':''}" ${page===p?'aria-current="page"':''}>${icon(p)}<span>${pages[p][0]}</span>${c!==undefined?`<span class="nav-count">${c}</span>`:''}</a>`};
-  $('#navigation').innerHTML=`${link('spaces')}<div class="nav-group">节点资源</div>${['sources','nodes'].map(link).join('')}<div class="nav-group">代理设置</div>${['groups','library','inbounds'].map(link).join('')}<button type="button" class="nav-item" id="nav-base-config" ${$('#base-config')?.disabled?'disabled':''}>${icon('settings')}<span>基础设置</span></button><div class="nav-group">DNS 设置</div>${link('dns')}`;
+  $('#navigation').innerHTML=`${link('spaces')}${link('sync')}<div class="nav-group">节点资源</div>${['sources','nodes'].map(link).join('')}<div class="nav-group">代理设置</div>${['groups','library','inbounds'].map(link).join('')}<button type="button" class="nav-item" id="nav-base-config" ${$('#base-config')?.disabled?'disabled':''}>${icon('settings')}<span>基础设置</span></button><div class="nav-group">DNS 设置</div>${link('dns')}`;
   $('#nav-base-config').onclick=()=>{if(typeof setNavigation==='function')setNavigation(false);$('#base-config').click()};
 };
 function paintSpaceSelect(){
@@ -32,10 +34,11 @@ function paintSpaceSelect(){
 const renderWithSpaces=render;
 render=function(){
   policyView='rules';paintSpaceSelect();
-  if(!['spaces','inbounds','dns'].includes(page)){renderWithSpaces();return}
+  if(!['spaces','sync','inbounds','dns'].includes(page)){renderWithSpaces();return}
   nav();$('#breadcrumb').textContent=pages[page][0];$('#page-title').textContent=pages[page][0];$('#page-description').textContent=pages[page][1];
   $('#create').hidden=page==='dns';$('#create').innerHTML=icon('plus')+pages[page][2];
   if(page==='spaces'){renderSpaces();return}
+  if(page==='sync'){renderDevicePage();return}
   if(page==='inbounds')renderInbounds();else renderDns();
 };
 // These panels are now independent navigation destinations.

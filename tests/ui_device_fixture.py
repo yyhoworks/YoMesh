@@ -31,6 +31,7 @@ def main(port=8769, *, dynamic_after_pull=False):
     with tempfile.TemporaryDirectory(prefix="yomesh-device-ui-") as folder:
         root = Path(folder)
         shutil.copytree(ROOT / "web", root / "web")
+        shutil.copytree(ROOT / "scripts", root / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
         native = fixture()
         native["mihomo"]["proxy-providers"] = {
             "合成来源 A": {"type": "file", "path": "providers/synthetic-a.yaml"},

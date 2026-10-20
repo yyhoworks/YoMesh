@@ -1,6 +1,6 @@
 # YoMesh
 
-代理配置工作台，以同一份 Profile 管理 Mihomo / sing-box 代理配置与独立 DNS。当前版本 **0.16.2**，界面主要使用中文。
+代理配置工作台，以同一份 Profile 管理 Mihomo / sing-box 代理配置与独立 DNS。当前版本 **0.16.3**，界面主要使用中文。
 
 ## 功能
 
@@ -70,9 +70,9 @@ python scripts/yomesh.py export examples/profile.json --component dns --output o
 python -m unittest discover -s tests -v
 ```
 
-项目已有 254 项测试，覆盖原生加载、规则语义、隔离 DNS 查询、HTTP API、认证与独立登录页、迁移报告、原生 DNS 优先级、无损导出、设备同步与回滚。Linux 执行器测试在 Windows 上明确跳过；可选 LocalDNS 测试在程序未安装或平台不支持时也明确跳过。内核加载与本机测试不代表真实订阅、外部节点、设备接管或上游连通性已验证。
+项目已有 255 项测试，覆盖原生加载、规则语义、隔离 DNS 查询、HTTP API、认证与独立登录页、迁移报告、原生 DNS 优先级、无损导出、设备同步与回滚、安装文件下载权限。Linux 执行器测试在 Windows 上明确跳过；可选 LocalDNS 测试在程序未安装或平台不支持时也明确跳过。内核加载与本机测试不代表真实订阅、外部节点、设备接管或上游连通性已验证。
 
-设备同步须先启用工作台密码保护，并在每台目标设备上安装受限执行器；不会在安装 YoMesh 后自动连接任何人的服务器。复制安装、Hermes 接入、发布及恢复步骤见 [指定服务器同步](docs/device-sync.md)。
+左侧独立的“设备同步”页面集中管理服务器与 Hermes，并提供接入步骤、安装脚本下载、配置文件下载和可复制的命令。设备同步须先启用工作台密码保护，并在每台目标设备上安装受限执行器；新服务器需先安装 Mihomo / LocalDNS、准备初始配置和服务。复制安装、Hermes 接入、发布及恢复步骤见 [指定服务器同步](docs/device-sync.md)。
 
 更多说明：[兼容约定](docs/compatibility.md) · [架构](docs/architecture.md) · [规则工作台](docs/rule-workbench.md) · [MosDNS 能力边界](docs/mosdns-localdns-gap-analysis.md) · [发布隐私说明](docs/privacy.md)。
 

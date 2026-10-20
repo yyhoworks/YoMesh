@@ -4,14 +4,14 @@ YoMesh 的设备同步以原生 Mihomo / LocalDNS 配置为准。它是显式的
 
 ## 四阶段工作流
 
-1. **登记并安装**：在“配置空间 → 设备同步”登记每台服务器，独立核对 SSH 主机指纹。YoMesh 为每台设备生成一把专用 SSH 密钥；私钥只存于被忽略的 `data/device-keys/`。目标设备一次性安装受限执行器，公钥被强制命令限制，不能获得任意 shell。
+1. **登记并安装**：在左侧独立的“设备同步”页面登记每台服务器，独立核对 SSH 主机指纹。YoMesh 为每台设备生成一把专用 SSH 密钥；私钥只存于被忽略的 `data/device-keys/`。目标设备一次性安装受限执行器，公钥被强制命令限制，不能获得任意 shell。
 2. **只读读取**：执行器读取指定 Mihomo 主配置、其引用的本地文件，以及 LocalDNS 的 `config/`、`rules/`、`generated/`。页面展示文件摘要和差异；确认后导入或更新独立原生配置空间。此阶段不重启服务、不改目标文件。订阅快照和动态表随后仍会由各自内核运行态改变。
 3. **预检与发布**：编辑该空间后执行“发布预检”。YoMesh 先比较上次读取时的文件 SHA-256；设备有外部修改即拒绝覆盖。发布包在目标设备用实际 Mihomo / LocalDNS 程序加载检查，展示新增、修改、删除的文件清单和包摘要。用户在工作台对这一包再次确认后，执行器备份目标文件、写入、重启并检查服务；失败自动回滚。成功后才能更新同步基准，且可对未再次改变的文件手动回滚。
 4. **Hermes 联动**：工作台生成一次性展示、可轮换/撤销的接入令牌。Hermes 上的 stdio MCP 桥只提供设备列表、只读比对、发布预检、记录与状态；它不能确认发布、回滚、取得设备 root 密码或完整代理凭据。最终发布仍需回到 YoMesh 工作台。
 
 ## 安装到一台指定服务器
 
-目标需要 Python 3.11+、SSH、OpenRC 或 systemd，以及已存在的 Mihomo / LocalDNS 程序和服务。先在服务器本机核对主机指纹，再将工作台生成的 `device.pub` 与 `target.json` 连同项目中的 `scripts/device_installer.py`、`scripts/device_executor.py` 放到目标设备的临时目录。不要把私钥、密码、订阅文件或真实 `target.json` 提交到 Git。
+目标需要 Linux、Python 3.11+、SSH、OpenRC 或 systemd，以及已存在的 Mihomo / LocalDNS 程序、初始配置和服务。空白机器需先完成这些准备，当前页面不自动安装内核或创建服务。在“设备同步 → 新服务器如何接入？”可查看完整步骤。先在服务器本机核对主机指纹，再填写连接表单。生成密钥后，页面直接提供 `device.pub`、`target.json`、`device_installer.py` 和 `device_executor.py` 四个文件下载；用 SFTP / WinSCP 上传到目标设备同一临时目录。不要把私钥、密码、订阅文件或真实 `target.json` 提交到 Git。
 
 ```sh
 python3 device_installer.py target.json device.pub --check
@@ -24,7 +24,7 @@ python3 device_installer.py target.json device.pub
 
 ## Hermes MCP 配置
 
-先在 YoMesh 的“设备同步 → Hermes 接入”生成令牌。令牌只显示一次；服务端只保存 SHA-256，不在配置仓库或日志中保存明文。在 Hermes 主机将下列 JSON 放到仅其运行用户可读的文件，例如 `/root/.config/yomesh/hermes.json`，权限为 `0600`：
+在左侧“设备同步 → Hermes 接入”可随时查看完整配置步骤、下载桥接脚本并复制 MCP YAML，已有接入无需为了查看说明而轮换令牌。先填写 Hermes 主机能访问的 YoMesh HTTPS 根地址，再生成令牌并下载包含该令牌的 `hermes.json`。令牌只显示一次；服务端只保存 SHA-256，不在配置仓库或日志中保存明文。在 Hermes 主机将 JSON 放到仅其运行用户可读的文件，例如 `/root/.config/yomesh/hermes.json`，权限为 `0600`。以下路径以 root 运行 Hermes 为例，其他用户需修改全部路径：
 
 ```json
 {"base_url":"https://your-yomesh.example","token":"<一次性令牌>"}

@@ -6,12 +6,11 @@ const deviceSpaceName=ident=>spaceCatalog?.spaces?.find(item=>item.id===ident)?.
 const deviceDate=value=>value?new Date(value).toLocaleString('zh-CN'):'尚未读取';
 const deviceError=(element,error)=>{element.textContent=error.message;element.classList.add('is-error')};
 
-const paintSpaceCardsWithoutDevices=paintSpaceCards;
-paintSpaceCards=function(){
-  paintSpaceCardsWithoutDevices();
-  $('#content').insertAdjacentHTML('beforeend',`<section class="panel device-panel" id="device-panel" aria-labelledby="device-heading"><div class="section-title"><div><h2 id="device-heading">设备同步</h2><p>读取指定服务器的 Mihomo / LocalDNS；已保存配置先预检，再确认发布。</p></div><button type="button" class="button" id="device-add" disabled>连接服务器</button></div><p class="device-status" id="device-list-status" role="status">正在读取设备列表…</p><div class="device-list" id="device-list"></div></section>`);
+function renderDevicePage(){
+  $('#content').innerHTML=`<section class="panel device-panel" id="device-panel" aria-labelledby="device-heading"><div class="section-title"><div><h2 id="device-heading">指定服务器</h2><p>读取 Mihomo / LocalDNS 到独立配置空间，修改后在这里预检并发布。</p></div><button type="button" class="button" id="device-hermes" disabled>Hermes 接入</button></div><p class="device-status" id="device-list-status" role="status">正在读取设备列表…</p><div class="device-list" id="device-list"></div></section>`;
+  $('#create').disabled=true;$('#create').onclick=openDeviceSetup;
   const panel=$('#device-panel'),serial=++deviceSerial;
-  $('#device-add',panel).insertAdjacentHTML('beforebegin','<button type="button" class="button" id="device-hermes" disabled>Hermes 接入</button>');
+  panel.insertAdjacentHTML('beforeend',deviceServerGuide());
   api('/api/devices').then(result=>{
     if(!panel.isConnected||serial!==deviceSerial)return;
     deviceCatalog=result;paintDeviceList(panel);
@@ -21,15 +20,26 @@ paintSpaceCards=function(){
     if(error.message.includes('密码保护'))status.insertAdjacentHTML('afterend','<button type="button" class="button" id="device-open-account">打开账号设置</button>');
     $('#device-open-account',panel)?.addEventListener('click',()=>$('#account-btn').click());
   });
+}
+
+const renderBeforeDeviceNavigation=render;
+render=function(){
+  renderBeforeDeviceNavigation();
+  const globalPage=page==='sync';
+  $('.breadcrumb').classList.toggle('device-global-view',globalPage);
+  $('#export').hidden=globalPage;
+  const subscription=$('#subscription-link');if(subscription)subscription.hidden=globalPage;
+  if(globalPage){const footer=$$('.workspace-footer span');footer[0].textContent='设备同步 / Hermes 联动';footer[1].textContent='读取 → 编辑 → 预检 → 确认发布'}
 };
 
 function paintDeviceList(panel=$('#device-panel')){
   if(!panel)return;
   const rows=deviceCatalog?.devices||[];
+  $('.device-guide',panel).open=rows.length===0;
   $('#device-list-status',panel).textContent=rows.length?`${rows.length} 台服务器 · 仅显示已登记目标`:'尚无服务器。先核对 SSH 主机指纹，再安装受限执行器。';
   $('#device-list-status',panel).classList.remove('is-error');
-  $('#device-add',panel).disabled=false;
-  $('#device-add',panel).onclick=openDeviceSetup;
+  $('#create').disabled=false;
+  $('#create').onclick=openDeviceSetup;
   $('#device-hermes',panel).disabled=false;
   $('#device-hermes',panel).onclick=openHermesAccess;
   $('#device-list',panel).innerHTML=rows.map(row=>`<div class="device-row"><div class="device-row-main"><strong>${esc(row.name)}</strong><small>${esc(row.host)}:${row.port} · ${esc(row.manager)} · ${esc(deviceSpaceName(row.space_id))}</small><small>最近读取：${esc(deviceDate(row.last_read))} · ${row.baseline_digest?'已有比对基准':'尚无比对基准'}</small></div><div class="device-row-actions"><button type="button" class="button" data-device-probe="${esc(row.id)}">检查连接</button><button type="button" class="button" data-device-read="${esc(row.id)}">读取并比对</button><button type="button" class="button primary" data-device-plan="${esc(row.id)}" ${row.space_id&&row.baseline_digest?'':'disabled'}>发布预检</button><button type="button" class="text-button" data-device-history="${esc(row.id)}">发布记录</button></div></div>`).join('');
@@ -56,7 +66,7 @@ function deviceUnbind(ident){
   $('#device-unbind-confirm').onclick=async event=>{event.target.disabled=true;try{await api(`/api/devices/${ident}/unbind`,{revision:deviceCatalog.revision});$('#dialog').close();await refreshDevices();toast('已解除绑定；设备配置未修改。')}catch(error){$('#device-unbind-error').textContent=error.message;event.target.disabled=false}};
 }
 
-async function refreshDevices(){deviceCatalog=await api('/api/devices');if(page==='spaces')paintDeviceList()}
+async function refreshDevices(){deviceCatalog=await api('/api/devices');if(page==='sync')paintDeviceList()}
 async function deviceProbe(ident,button){
   if(deviceBusy)return;deviceBusy=true;button.disabled=true;
   try{const result=await api(`/api/devices/${ident}/probe`);toast(`执行器已连接 · Mihomo ${result.mihomo?'可用':'缺失'} · LocalDNS ${result.localdns?'可用':'缺失'}`)}
@@ -65,6 +75,8 @@ async function deviceProbe(ident,button){
 
 function openDeviceSetup(){
   showDialog('连接指定服务器',`<form id="device-setup-form" class="device-setup-form"><p class="notice">先在目标设备安装受限执行器。YoMesh 只保存设备专用 SSH 密钥，不保存 root 密码；发布前会核对设备指纹、逐文件差异和内核校验。</p><div class="fields"><label class="field">服务器名称<input name="name" maxlength="80" required placeholder="例如：家庭网关"></label><label class="field">IP 或主机名<input name="host" required placeholder="192.168.8.7"></label><label class="field">SSH 端口<input name="port" type="number" min="1" max="65535" value="22" required></label><label class="field">SSH 用户<input name="username" value="root" readonly></label></div><div class="filter-row"><button type="button" class="button" id="device-get-fingerprint">读取 SSH 主机指纹</button><span id="device-fingerprint-status" role="status">请在目标设备上独立核对指纹。</span></div><label class="field">已核对的 SSH 主机指纹<input name="host_key" pattern="SHA256:[A-Za-z0-9+/]{43}" required placeholder="SHA256:…"></label><label class="check-row"><input name="confirmed_host_key" type="checkbox" required> 我已在目标设备核对该指纹</label><fieldset><legend>Mihomo 路径</legend><div class="fields"><label class="field">工作目录<input name="mihomo_home" required placeholder="/etc/mihomo"></label><label class="field">主配置文件<input name="mihomo_config" required placeholder="/etc/mihomo/config.yaml"></label><label class="field">内核程序<input name="mihomo_binary" required placeholder="/usr/local/bin/mihomo"></label></div></fieldset><fieldset><legend>LocalDNS 路径</legend><div class="fields"><label class="field">配置根目录<input name="localdns_root" required placeholder="/opt/localdns"></label><label class="field">内核程序<input name="localdns_binary" required placeholder="/opt/localdns/localdns"></label></div></fieldset><fieldset><legend>服务与执行器</legend><div class="fields"><label class="field">服务管理<select name="manager"><option value="openrc">OpenRC</option><option value="systemd">systemd</option></select></label><label class="field">Mihomo 服务<input name="mihomo_service" required placeholder="mihomo"></label><label class="field">LocalDNS 服务<input name="localdns_service" required placeholder="localdns"></label><label class="field">执行器状态目录<input name="state_dir" required value="/var/lib/yomesh-executor"></label></div></fieldset><p class="error-message" id="device-setup-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button" id="device-setup-cancel">取消</button><button type="submit" class="button primary" id="device-setup-submit">生成设备密钥</button></div></form>`);
+  $('#device-setup-form>.notice').textContent='先填写服务器信息并生成设备密钥，再按下一步下载文件、安装受限执行器。YoMesh 只保存设备专用 SSH 密钥，不保存 root 密码。';
+  $('#device-setup-form>.notice').insertAdjacentHTML('afterend','<p class="device-prerequisites">目标服务器需已安装并运行 Mihomo / LocalDNS，且具备 Python 3.11+、SSH 与 OpenRC / systemd。空白机器请先准备内核、初始配置和服务，再在这里登记。</p>'+deviceServerGuide());
   $('#device-setup-form fieldset:last-of-type').insertAdjacentHTML('beforeend','<details class="advanced-options"><summary>校验程序所需环境变量</summary><label class="field">JSON 对象<textarea name="validation_env" rows="3" spellcheck="false">{}</textarea><small>例如 LocalDNS 依赖 LD_PRELOAD 时填写对应路径；只用于设备上的原生校验。</small></label></details>');
   $('#device-setup-cancel').onclick=()=>$('#dialog').close();
   $('#device-get-fingerprint').onclick=async()=>{
@@ -86,12 +98,6 @@ function openDeviceSetup(){
     catch(reason){error.textContent=reason.message;$('#device-setup-submit').disabled=false}
     finally{deviceBusy=false}
   };
-}
-
-function showDeviceInstall(result,settings,stateDir,validationEnv){
-  const policy={format:'yomesh-executor-v1',manager:settings.manager,mihomo_home:settings.mihomo_home,mihomo_config:settings.mihomo_config,mihomo_binary:settings.mihomo_binary,localdns_root:settings.localdns_root,localdns_binary:settings.localdns_binary,state_dir:stateDir,services:settings.services,validation_env:validationEnv};
-  showDialog('安装受限执行器 · '+result.device.name,`<div class="device-install"><p>设备记录已保存，但尚未连接成功。将下列公钥保存为 <code>device.pub</code>、目标设置保存为 <code>target.json</code>，和项目提供的 <code>device_installer.py</code>、<code>device_executor.py</code> 一起放到目标服务器。先核对，再由设备管理员执行安装。</p><label class="field">设备专用公钥<textarea rows="4" readonly>${esc(result.public_key)}</textarea></label><label class="field">目标设置 JSON<textarea rows="12" readonly>${esc(JSON.stringify(policy,null,2))}</textarea></label><pre>python3 device_installer.py target.json device.pub --check\npython3 device_installer.py target.json device.pub</pre><p class="preview-note">安装会备份并更新 root 的 authorized_keys，密钥被强制限定为 YoMesh 执行器；不允许任意 shell。安装完成后点击“检查连接”。</p><div class="dialog-actions"><button type="button" class="button primary" id="device-install-done">完成</button></div></div>`);
-  $('#device-install-done').onclick=()=>$('#dialog').close();
 }
 
 async function deviceRead(ident,button){
@@ -157,18 +163,4 @@ async function deviceHistory(ident){
 
 async function openHermesAccess(){
   try{const state=await api('/api/integrations/hermes');paintHermesAccess(state)}catch(error){toast(error.message)}
-}
-
-function paintHermesAccess(state,token=null){
-  const base=location.origin;
-  showDialog('Hermes 接入',`<div class="device-install"><p>Hermes 可读取设备摘要、查看发布记录与准备原生校验；不能确认发布、回滚或取得 root 密码。所有实际发布仍在 YoMesh 工作台确认。</p><p class="device-status">${state.enabled?'已启用 · '+deviceDate(new Date(state.created*1000).toISOString()):'尚未启用'}</p>${token?`<p class="notice">此令牌只显示这一次。请保存到 Hermes 主机上仅 root 可读的配置文件，不要放入聊天、命令行、环境变量或仓库。</p><label class="field">一次性接入令牌<textarea rows="3" readonly>${esc(token)}</textarea></label><label class="field">Hermes bridge 配置示例<textarea rows="6" readonly>${esc(JSON.stringify({base_url:base,token},null,2))}</textarea></label><pre>chmod 600 /root/.config/yomesh/hermes.json\npython3 /root/.local/share/yomesh/yomesh_hermes_mcp.py --config /root/.config/yomesh/hermes.json</pre>`:''}<p class="preview-note">将项目提供的 <code>scripts/yomesh_hermes_mcp.py</code> 放到 Hermes 主机，并在 Hermes 的 <code>mcp_servers</code> 中配置上述 stdio 命令。连接使用 HTTPS；本机测试例外。</p><p class="error-message" id="device-hermes-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button" id="device-hermes-close">关闭</button>${state.enabled?'<button type="button" class="button danger-button" id="device-hermes-revoke">撤销接入</button>':''}<button type="button" class="button primary" id="device-hermes-rotate">${state.enabled?'轮换令牌':'生成令牌'}</button></div></div>`);
-  $('#device-hermes-close').onclick=()=>$('#dialog').close();
-  $('#device-hermes-rotate').onclick=async event=>{event.target.disabled=true;try{const result=await api('/api/integrations/hermes/rotate',{});paintHermesAccess(result,result.token)}catch(error){$('#device-hermes-error').textContent=error.message;event.target.disabled=false}};
-  if(state.enabled)$('#device-hermes-revoke').onclick=event=>{
-    event.target.disabled=true;
-    $('#device-hermes-error').textContent='撤销后 Hermes 将立即无法访问；再次点击确认。';
-    event.target.textContent='确认撤销接入';
-    event.target.onclick=async()=>{try{paintHermesAccess(await api('/api/integrations/hermes/revoke',{}))}catch(error){$('#device-hermes-error').textContent=error.message;event.target.disabled=false}};
-    event.target.disabled=false;
-  };
 }
