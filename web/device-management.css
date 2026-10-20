@@ -1,0 +1,24 @@
+.device-panel{margin-top:24px;padding:24px;border:1px solid var(--line)}
+.device-panel .section-title{align-items:flex-start;gap:16px}
+.device-panel h2{margin:0;font-size:20px}
+.device-panel .section-title p{margin:5px 0 0;color:var(--muted);font-size:12px}
+.device-panel .error-message{margin:12px 0}
+.device-list{display:grid;gap:12px;margin-top:18px}
+.device-row{display:flex;align-items:flex-start;gap:20px;padding:16px 0;border-top:1px solid var(--line)}
+.device-row:first-child{border-top:0}
+.device-row-main{min-width:0;flex:1}
+.device-row-main strong{display:block;font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.device-row-main small{display:block;margin-top:4px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.device-row-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.device-row-actions .button{min-height:38px}
+.device-setup-form .fields{margin:16px 0}
+.device-setup-form fieldset{border:1px solid var(--line);border-radius:var(--rounded-control,7px);padding:16px;margin:18px 0}
+.device-setup-form legend{font-size:14px;padding:0 5px}
+.device-setup-form .check-row{margin:14px 0}
+.device-setup-form .dialog-actions{position:sticky;bottom:-26px;z-index:1;background:var(--solid);padding:14px 0;margin-bottom:-26px;border-top:1px solid var(--line)}
+.device-setup-form pre,.device-install pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;background:var(--control-bg);border:1px solid var(--line);border-radius:7px;padding:14px;font:12px/1.6 Consolas,monospace}
+.device-preview-list{max-height:240px;overflow:auto;padding-left:20px;font:12px/1.7 Consolas,monospace;overflow-wrap:anywhere}
+.device-preview-list li{margin:5px 0}
+.device-status{margin:12px 0;color:var(--muted);font-size:14px}
+.device-status.is-error{color:var(--red)}
+@media(max-width:780px){.device-panel{padding:16px}.device-panel .section-title,.device-row{flex-direction:column}.device-row-actions{width:100%;justify-content:flex-start}.device-row-actions .button,.device-row-actions .text-button,.device-panel .section-title>.button{min-height:44px}.device-setup-form input,.device-setup-form select{font-size:16px}.device-setup-form .dialog-actions{bottom:-16px;margin-bottom:-16px}.device-setup-form .dialog-actions .button{min-height:44px}}

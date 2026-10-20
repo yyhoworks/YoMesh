@@ -1,6 +1,6 @@
 # YoMesh
 
-代理配置工作台，以同一份 Profile 管理 Mihomo / sing-box 代理配置与独立 DNS。当前版本 **0.15.3**，界面主要使用中文。
+代理配置工作台，以同一份 Profile 管理 Mihomo / sing-box 代理配置与独立 DNS。当前版本 **0.16.1**，界面主要使用中文。
 
 ## 功能
 
@@ -13,6 +13,8 @@
 - 原生 Mihomo 空间保留未知字段与复杂规则，不擅自转换成 sing-box。已有 LocalDNS 空间默认使用原生 LocalDNS 编辑、预览、校验和导出；另存的 MosDNS 迁移草稿不会覆盖原生 DNS。
 - 预览、校验与导出使用同一后端模型；下载前使用锁定版本的实际内核验证。
 - 已保存的 LocalDNS 原件可直接生成 MosDNS 表单草稿，附转换报告；也支持设置 JSON 文件或粘贴导入。大型规则快照按段编辑、搜索，保存时完整保留其他条件。
+- 可登记指定服务器，使用设备专用受限 SSH 执行器只读拉取原生 Mihomo / LocalDNS；编辑独立空间后逐文件预检、显式确认发布并支持回滚。设备外部修改、未纳入基准的已有文件及内核版本不符会阻止覆盖。
+- Hermes 可通过可轮换的专用令牌和 stdio MCP 桥读取设备摘要、准备发布；不能直接确认发布或取得设备 root 密码。
 
 ## 本地运行（Windows）
 
@@ -68,7 +70,9 @@ python scripts/yomesh.py export examples/profile.json --component dns --output o
 python -m unittest discover -s tests -v
 ```
 
-项目已有 240 项测试，覆盖原生加载、规则语义、隔离 DNS 查询、HTTP API、认证与独立登录页、迁移报告、原生 DNS 优先级、无损导出、持久化与回滚。可选 LocalDNS 的测试会在对应程序未安装或平台不支持时明确跳过。内核加载与本机测试不代表真实订阅、外部节点、设备接管或上游连通性已验证。
+项目已有 253 项测试，覆盖原生加载、规则语义、隔离 DNS 查询、HTTP API、认证与独立登录页、迁移报告、原生 DNS 优先级、无损导出、设备同步与回滚。Linux 执行器测试在 Windows 上明确跳过；可选 LocalDNS 测试在程序未安装或平台不支持时也明确跳过。内核加载与本机测试不代表真实订阅、外部节点、设备接管或上游连通性已验证。
+
+设备同步须先启用工作台密码保护，并在每台目标设备上安装受限执行器；不会在安装 YoMesh 后自动连接任何人的服务器。复制安装、Hermes 接入、发布及恢复步骤见 [指定服务器同步](docs/device-sync.md)。
 
 更多说明：[兼容约定](docs/compatibility.md) · [架构](docs/architecture.md) · [规则工作台](docs/rule-workbench.md) · [MosDNS 能力边界](docs/mosdns-localdns-gap-analysis.md) · [发布隐私说明](docs/privacy.md)。
 

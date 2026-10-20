@@ -3,8 +3,9 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml compose.yaml ./
 COPY src ./src
-COPY scripts/yomesh.py ./scripts/yomesh.py
+COPY scripts ./scripts
 COPY web ./web
 COPY examples ./examples
 COPY tests ./tests

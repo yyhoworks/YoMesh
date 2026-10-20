@@ -43,6 +43,10 @@ typography:
   mono:
     fontFamily: "Consolas, monospace"
     fontSize: "12px"
+  mobileInput:
+    fontFamily: "'Segoe UI', 'Microsoft YaHei UI', sans-serif"
+    fontSize: "16px"
+    fontWeight: 400
 rounded:
   badge: "5px"
   control: "7px"
@@ -85,6 +89,10 @@ components:
 ---
 
 # Design System: YoMesh
+
+## 指定服务器同步（0.16.0）
+
+在配置空间卡片下增加设备同步区块，不改主导航、侧栏或 LocalDNS 玻璃材质。每台设备同一行显示名称、地址、绑定空间、最近读取与基准状态，读取/比对和发布预检是不同按钮。登记表单保留常驻标签、主机指纹二次核对、原生路径及服务名；安装说明显示设备专用公钥与目标设置，不索取或保存 root 密码。发布对话框列出逐文件新增/修改/删除、包摘要、原生校验及运行状态，确认发布和回滚必须是明确操作。Hermes 接入只显示一次令牌，重新打开不回显；撤销有二次确认。手机单列、按钮至少 44px，长路径和摘要换行，保持现有玻璃 token 与固定焦点样式。
 
 ## MosDNS 迁移与大快照编辑
 

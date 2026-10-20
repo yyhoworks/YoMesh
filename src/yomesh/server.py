@@ -8,14 +8,16 @@ import zipfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from .compiler import compile_bundle
 from . import __version__
+from .auth import SESSION_COOKIE, SESSION_TTL_SECONDS, AuthStore, AuthUnavailable
+from .compiler import compile_bundle
+from .device_management import DeviceManagement
+from .hermes_access import HermesAccess, HermesUnavailable
 from .model import ConfigError, Profile
-from .native import validate_bundle, find_core, serialize_config
-from .workspace import Conflict
-from .spaces import ConfigurationSpaces
+from .native import find_core, serialize_config, validate_bundle
 from .publication import Publications
-from .auth import AuthStore, AuthUnavailable, SESSION_COOKIE, SESSION_TTL_SECONDS
+from .spaces import ConfigurationSpaces
+from .workspace import Conflict
 
 
 def handler_for(root: Path, port: int, public_hosts=()):
@@ -23,6 +25,8 @@ def handler_for(root: Path, port: int, public_hosts=()):
     allowed_origins = {scheme + h for h in allowed_hosts for scheme in ("http://", "https://")}
     spaces = ConfigurationSpaces(root)
     publications = Publications(root, spaces)
+    devices = DeviceManagement(root, spaces)
+    hermes_access = HermesAccess(root)
     auth = AuthStore(root)
     from .interaction_service import InteractionService
     interactions = InteractionService(root, spaces)
@@ -31,6 +35,8 @@ def handler_for(root: Path, port: int, public_hosts=()):
     class Handler(SimpleHTTPRequestHandler):
         subscription_service = subscriptions
         space_catalog = spaces
+        device_management = devices
+        hermes_store = hermes_access
         auth_store = auth
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(root / "web"), **kwargs)
@@ -95,6 +101,8 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 self._do_GET()
             except AuthUnavailable as error:
                 self.json_response(503, {"error": str(error), "auth_unavailable": True})
+            except HermesUnavailable as error:
+                self.json_response(503, {"error": str(error)})
 
         def _do_GET(self):
             if self.path.startswith("/s/"):
@@ -134,12 +142,60 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 user = self.authenticated_user()
                 self.json_response(200, {"enabled": auth.is_enabled(), "authenticated": user is not None, "username": user or auth.current_username()})
                 return
-            if self.path.startswith("/api/"):
-                if self.authenticated_user() is None:
-                    self.json_response(401, {"error": "请先登录 YoMesh 工作台", "auth_required": True, "username": auth.current_username()})
+            if self.path.startswith("/api/hermes/"):
+                if not auth.is_enabled() or not hermes_access.verify(self.headers.get("Authorization")):
+                    self.json_response(401, {"error": "Hermes 接入凭据无效或已撤销"})
                     return
+                try:
+                    if self.path == "/api/hermes/devices":
+                        result = [{key: row[key] for key in ("id", "name", "host", "space_id", "last_read", "capabilities")}
+                                  for row in devices.listing()["devices"]]
+                    else:
+                        match = re.fullmatch(r"/api/hermes/devices/(device_[a-f0-9]{32})/(preview|releases)", self.path)
+                        release_match = re.fullmatch(r"/api/hermes/releases/(release_[a-f0-9]{32})/status", self.path)
+                        if match:
+                            ident, action = match.groups()
+                            result = devices.preview_pull(ident) if action == "preview" else devices.releases_for(ident)
+                        elif release_match:
+                            result = devices.status(release_match.group(1))
+                        else:
+                            self.json_response(404, {"error": "Hermes 接口不存在"})
+                            return
+                    self.json_response(200, result)
+                except ConfigError as error:
+                    self.json_response(422, {"error": str(error)})
+                return
+            if self.path.startswith("/api/") and self.authenticated_user() is None:
+                self.json_response(401, {"error": "请先登录 YoMesh 工作台", "auth_required": True, "username": auth.current_username()})
+                return
             if self.path == "/api/spaces":
                 self.json_response(200, spaces.snapshot())
+                return
+            if self.path == "/api/integrations/hermes":
+                if not auth.is_enabled():
+                    self.json_response(403, {"error": "请先启用密码保护，再配置 Hermes 接入"})
+                    return
+                self.json_response(200, hermes_access.listing())
+                return
+            if self.path == "/api/devices":
+                if not auth.is_enabled():
+                    self.json_response(403, {"error": "请先在账号设置启用密码保护，再连接服务器"})
+                    return
+                self.json_response(200, devices.listing())
+                return
+            device_match = re.fullmatch(r"/api/devices/(device_[a-f0-9]{32})/(probe|preview-pull|releases)", self.path)
+            if device_match:
+                if not auth.is_enabled():
+                    self.json_response(403, {"error": "请先在账号设置启用密码保护，再连接服务器"})
+                    return
+                ident, action = device_match.groups()
+                try:
+                    result = (devices.probe(ident) if action == "probe" else
+                              devices.preview_pull(ident) if action == "preview-pull" else
+                              devices.releases_for(ident))
+                    self.json_response(200, result)
+                except ConfigError as error:
+                    self.json_response(422, {"error": str(error)})
                 return
             if self.path.startswith("/api/"):
                 try:
@@ -169,7 +225,7 @@ def handler_for(root: Path, port: int, public_hosts=()):
             if not self.local_request():
                 self.json_response(403, {"error": "请求地址未列入 YoMesh 允许的访问地址"})
                 return
-            if self.path != "/api/export" and not self.path.startswith(("/api/auth", "/api/spaces", "/api/sources", "/api/workspace", "/api/nodes", "/api/library", "/api/groups")):
+            if self.path != "/api/export" and not self.path.startswith(("/api/auth", "/api/spaces", "/api/devices", "/api/hermes", "/api/integrations/hermes", "/api/sources", "/api/workspace", "/api/nodes", "/api/library", "/api/groups")):
                 self.json_response(404, {"error": "接口不存在"})
                 return
             try:
@@ -180,6 +236,20 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 request = json.loads(self.rfile.read(length).decode("utf-8"))
                 if not isinstance(request, dict):
                     raise ConfigError("请求需要对象")
+                if self.path.startswith("/api/hermes/"):
+                    if not auth.is_enabled() or not hermes_access.verify(self.headers.get("Authorization")):
+                        self.json_response(401, {"error": "Hermes 接入凭据无效或已撤销"})
+                        return
+                    match = re.fullmatch(r"/api/hermes/devices/(device_[a-f0-9]{32})/plan", self.path)
+                    if not match:
+                        self.json_response(404, {"error": "Hermes 接口不存在"})
+                        return
+                    device = devices.registry.device(match.group(1))
+                    if not device.get("space_id"):
+                        raise ConfigError("先在工作台绑定设备配置")
+                    revision = spaces.workspace_snapshot(device["space_id"])["revision"]
+                    self.json_response(200, devices.plan(device["id"], revision))
+                    return
                 if self.path == "/api/auth/login":
                     token = auth.login(str(request.get("username") or ""), str(request.get("password") or ""))
                     cookie_val = f"{SESSION_COOKIE}={token}; Path=/; Max-Age={SESSION_TTL_SECONDS}; HttpOnly; SameSite=Lax"
@@ -206,6 +276,53 @@ def handler_for(root: Path, port: int, public_hosts=()):
                     cookie_val = f"{SESSION_COOKIE}={token}; Path=/; Max-Age={SESSION_TTL_SECONDS}; HttpOnly; SameSite=Lax"
                     self.json_response(200, {"ok": True, "username": auth.current_username(), "enabled": True}, extra_headers=[("Set-Cookie", cookie_val)])
                     return
+                if self.path.startswith("/api/integrations/hermes"):
+                    if not auth.is_enabled():
+                        self.json_response(403, {"error": "请先启用密码保护，再配置 Hermes 接入"})
+                        return
+                    if self.path == "/api/integrations/hermes/rotate":
+                        result = hermes_access.rotate()
+                    elif self.path == "/api/integrations/hermes/revoke":
+                        result = hermes_access.revoke()
+                    else:
+                        self.json_response(404, {"error": "Hermes 接口不存在"})
+                        return
+                    self.json_response(200, result)
+                    return
+                if self.path.startswith("/api/devices"):
+                    if not auth.is_enabled():
+                        self.json_response(403, {"error": "请先在账号设置启用密码保护，再连接服务器"})
+                        return
+                    if self.path == "/api/devices/host-key":
+                        result = devices.host_key(request.get("host"), request.get("port"))
+                    elif self.path == "/api/devices":
+                        result = devices.add(request.get("device"), request.get("revision"))
+                    else:
+                        match = re.fullmatch(r"/api/devices/(device_[a-f0-9]{32})/(bind|unbind|pull|plan)", self.path)
+                        release_match = re.fullmatch(r"/api/devices/releases/(release_[a-f0-9]{32})/(approve|status|rollback)", self.path)
+                        if match:
+                            ident, action = match.groups()
+                            if action == "bind":
+                                result = devices.bind(ident, request.get("space_id"), request.get("revision"))
+                            elif action == "unbind":
+                                result = devices.unbind(ident, request.get("revision"))
+                            elif action == "pull":
+                                result = devices.pull(ident, request.get("remote_digest"), request.get("workspace_revision"), replace=request.get("replace") is True)
+                            else:
+                                result = devices.plan(ident, request.get("workspace_revision"))
+                        elif release_match:
+                            ident, action = release_match.groups()
+                            if action == "approve":
+                                result = devices.approve(ident, request.get("device_id"), request.get("bundle_sha256"), request.get("workspace_revision"))
+                            elif action == "status":
+                                result = devices.status(ident)
+                            else:
+                                result = devices.rollback(ident)
+                        else:
+                            self.json_response(404, {"error": "设备接口不存在"})
+                            return
+                    self.json_response(200, result)
+                    return
                 if self.path == "/api/spaces/group-category-names":
                     self.json_response(200, spaces.save_group_category_names(request.get("names"), request.get("revision")))
                     return
@@ -224,6 +341,8 @@ def handler_for(root: Path, port: int, public_hosts=()):
                     elif self.path.endswith("/select"):
                         result = spaces.select(request.get("id"), request.get("revision"))
                     else:
+                        if any(row.get("space_id") == request.get("id") for row in devices.listing()["devices"]):
+                            raise ConfigError("此空间已绑定服务器，请先在设备同步中解除绑定")
                         result = spaces.delete(request.get("id"), request.get("revision"))
                     self.json_response(200, result)
                     return
@@ -321,7 +440,7 @@ def handler_for(root: Path, port: int, public_hosts=()):
                     self.json_response(200, spaces.save_settings(request.get("settings"), request.get("revision"), scope))
                     return
                 if self.path in {"/api/workspace/mosdns/import", "/api/workspace/mosdns/import-localdns", "/api/workspace/mosdns/save", "/api/workspace/mosdns/preview", "/api/workspace/mosdns/check", "/api/workspace/mosdns/refresh"}:
-                    from .mosdns import checked, refresh_rule, refresh_ip_source
+                    from .mosdns import checked, refresh_ip_source, refresh_rule
                     workspace._revision(request.get("revision"))
                     profile = spaces.workspace_snapshot(scope)["profile"]
                     if self.path.endswith("/import-localdns"):
@@ -478,6 +597,8 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 self.wfile.write(raw)
             except AuthUnavailable as error:
                 self.json_response(503, {"error": str(error), "auth_unavailable": True})
+            except HermesUnavailable as error:
+                self.json_response(503, {"error": str(error)})
             except Conflict as error:
                 self.json_response(409, {"error": str(error)})
             except (ConfigError, ValueError, TypeError, KeyError) as error:

@@ -1,0 +1,39 @@
+/* Backdrop-filter gives each glass card its own stacking context. Raise the
+   open card so its menu can paint over the following card. */
+.panel:has(.resource-more[open]),
+.rule-table tr:has(.resource-more[open]) {
+  position: relative;
+  z-index: 12;
+}
+
+.resource-menu {
+  max-width: min(320px, calc(100vw - 24px));
+}
+
+@media (max-width: 780px) {
+  .native-resource-row > .native-resource-name {
+    flex-basis: 100%;
+  }
+
+  .native-resource-row > .resource-more {
+    margin-left: 0;
+  }
+
+  .space-card-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .space-card-actions > .primary {
+    margin-left: 0;
+  }
+
+  .space-card-actions > .resource-more {
+    margin-left: auto;
+  }
+
+  .resource-more > summary,
+  .resource-menu > button {
+    min-height: 44px;
+  }
+}
