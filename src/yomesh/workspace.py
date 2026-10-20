@@ -208,6 +208,7 @@ class Workspace:
         with self.lock:
             self._revision(revision)
             candidate = self._validate_profile(value)
+            before = deepcopy(self.state)
             self.state["profile"] = candidate
             active = candidate.get("active_plan")
             for plan in candidate.get("routing_plans", []):
@@ -215,7 +216,11 @@ class Workspace:
                     plan.update(policies=deepcopy(candidate["policies"]), fallback=candidate["fallback"])
             self.state["routing_plans"] = deepcopy(candidate.get("routing_plans", []))
             self.state["active_plan"] = active
-            self._write()
+            try:
+                self._write()
+            except Exception:
+                self.state = before
+                raise
             return self.snapshot()
 
     def _validate_profile(self, value, sources=None):

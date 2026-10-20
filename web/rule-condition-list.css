@@ -93,6 +93,4 @@ html[data-density=compact] .native-group-members{margin:9px 0}
 html[data-density=compact] .native-group-members small{margin-bottom:4px;line-height:1.5}
 html[data-density=compact] .space-grid{gap:12px}
 html[data-density=compact] .space-card{padding:16px 18px;min-height:200px}
-.auth-login-dialog{width:min(420px,calc(100vw - 32px));padding:28px}
-.auth-login-dialog #close-dialog{display:none}
 .auth-status-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:9px;background:var(--soft);border:1px solid var(--line);margin-bottom:16px;font-size:12px}

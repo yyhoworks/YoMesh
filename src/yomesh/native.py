@@ -63,30 +63,38 @@ def check_mosdns(binary, config, cwd):
     config.pop("api", None)
     if isinstance(config.get("log"), dict):
         config["log"].pop("file", None)
-    # Use a private ephemeral loopback port, never the user's deployment listener.
-    for _ in range(20):
-        with socket.socket() as holder, socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
-            try:
-                udp.bind(("127.0.0.1", 10000 + secrets.randbelow(39000)))
-                port = udp.getsockname()[1]
-                holder.bind(("127.0.0.1", port))
-                break
-            except OSError:
-                continue
-    else:
-        raise ConfigError("无法分配 MosDNS 临时 TCP/UDP 检查端口")
-    tcp_enabled = False
-    udp_enabled = False
+    # Every server gets its own loopback endpoint. Reusing one port for multiple
+    # TCP (or UDP) servers would make an otherwise valid custom config fail.
+    listeners = []
+    used_ports = set()
+    original_endpoints = set()
     for plugin in config["plugins"]:
         if plugin["type"] in {"udp_server", "tcp_server"}:
+            endpoint = (plugin["type"], plugin["args"].get("listen", ""))
+            if endpoint in original_endpoints:
+                raise ConfigError("MosDNS 同协议监听地址重复，请为各监听设置不同地址或端口")
+            original_endpoints.add(endpoint)
+            for _ in range(100):
+                port = 10000 + secrets.randbelow(39000)
+                if port in used_ports:
+                    continue
+                with socket.socket() as tcp, socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+                    try:
+                        tcp.bind(("127.0.0.1", port))
+                        udp.bind(("127.0.0.1", port))
+                        break
+                    except OSError:
+                        continue
+            else:
+                raise ConfigError("无法分配 MosDNS 临时 TCP/UDP 检查端口")
+            used_ports.add(port)
+            listeners.append((plugin["type"], port))
             plugin["args"]["listen"] = f"127.0.0.1:{port}"
-            tcp_enabled |= plugin["type"] == "tcp_server"
-            udp_enabled |= plugin["type"] == "udp_server"
         elif plugin["type"].endswith("_server"):
             raise ConfigError("MosDNS 隔离检查目前支持 UDP / TCP 服务，请将其他监听放在独立配置中")
         if plugin["type"] == "cache" and isinstance(plugin.get("args"), dict):
             plugin["args"].pop("dump_file", None)
-    if not (tcp_enabled or udp_enabled):
+    if not listeners:
         raise ConfigError("MosDNS 配置需要 UDP 或 TCP 监听以进行原生校验")
     path = Path(cwd) / "mosdns-smoke.yaml"
     write_json(path, config)
@@ -98,18 +106,23 @@ def check_mosdns(binary, config, cwd):
                 if proc.poll() is not None:
                     raise ConfigError("MosDNS 原生启动校验失败：配置插件无法加载")
                 try:
-                    if tcp_enabled:
-                        with socket.create_connection(("127.0.0.1", port), timeout=.15):
-                            break
-                    else:
-                        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
-                            try:
-                                probe.bind(("127.0.0.1", port))
-                            except OSError:
-                                break
-                        time.sleep(.05)
+                    ready = True
+                    for kind, port in listeners:
+                        if kind == "tcp_server":
+                            with socket.create_connection(("127.0.0.1", port), timeout=.15):
+                                pass
+                        else:
+                            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                                try:
+                                    probe.bind(("127.0.0.1", port))
+                                    ready = False
+                                except OSError:
+                                    pass
+                    if ready and proc.poll() is None:
+                        break
                 except OSError:
-                    time.sleep(.05)
+                    pass
+                time.sleep(.05)
             else:
                 raise ConfigError("MosDNS 原生启动校验超时")
             return {"status": "passed", "method": "native-startup", "listener": "temporary-loopback-port", "note": "验证插件加载和监听；未探测外部 DNS 或代理连通性"}

@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import threading
 import time
@@ -17,6 +18,10 @@ from .model import ConfigError
 SESSION_COOKIE = "yomesh_session"
 SESSION_TTL_SECONDS = 30 * 24 * 3600
 PBKDF2_ITERATIONS = 200_000
+
+
+class AuthUnavailable(OSError):
+    """Authentication storage failed; never interpret this as disabled auth."""
 
 
 def _hash_password(password: str, salt_hex: str) -> str:
@@ -37,6 +42,7 @@ class AuthStore:
         self.path = root / "data" / "auth.json"
         self._lock = threading.Lock()
         self._failed_attempts: list[float] = []
+        self._configured = self.path.exists()
         self._ensure_bootstrap()
 
     def _ensure_bootstrap(self) -> None:
@@ -48,15 +54,24 @@ class AuthStore:
             self._write_credentials(user, password, enabled=True)
 
     def _read(self) -> dict:
-        if not self.path.exists():
-            return {"enabled": False, "username": "admin"}
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                return {"enabled": False, "username": "admin"}
+            self._configured = True
+            if not isinstance(data, dict) or type(data.get("enabled")) is not bool:
+                raise ValueError()
+            if not isinstance(data.get("username"), str) or not 1 <= len(data["username"].strip()) <= 32:
+                raise ValueError()
+            if data["enabled"]:
+                for field, length in (("salt", 32), ("password_hash", 64), ("session_secret", 64)):
+                    if not isinstance(data.get(field), str) or not re.fullmatch(r"[0-9a-fA-F]{%d}" % length, data[field]):
+                        raise ValueError()
             return data
+        except FileNotFoundError:
+            if not self._configured:
+                return {"enabled": False, "username": "admin"}
         except (OSError, ValueError):
-            return {"enabled": False, "username": "admin"}
+            pass
+        raise AuthUnavailable("无法读取有效的登录凭据，访问已锁定；请管理员检查 data/auth.json 的权限或恢复有效备份") from None
 
     def _write_credentials(self, username: str, password: str, enabled: bool = True) -> dict:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -77,12 +92,13 @@ class AuthStore:
         except OSError:
             pass
         tmp.replace(self.path)
+        self._configured = True
         return payload
 
     def is_enabled(self) -> bool:
         with self._lock:
             data = self._read()
-            return bool(data.get("enabled") and data.get("password_hash") and data.get("session_secret"))
+            return data["enabled"]
 
     def current_username(self) -> str:
         with self._lock:
@@ -116,16 +132,16 @@ class AuthStore:
         if not secret or not expected_user:
             return None
         expected_sig = hmac.new(secret.encode("ascii"), b64.encode("ascii"), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(sig, expected_sig):
+        if not sig.isascii() or not hmac.compare_digest(sig, expected_sig):
             return None
         try:
             padded = b64 + "=" * (-len(b64) % 4)
             payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
         except Exception:
             return None
-        if payload.get("u") != expected_user:
+        if not isinstance(payload, dict) or payload.get("u") != expected_user:
             return None
-        if int(payload.get("exp") or 0) < int(time.time()):
+        if type(payload.get("exp")) is not int or payload["exp"] < int(time.time()):
             return None
         return expected_user
 
@@ -142,7 +158,7 @@ class AuthStore:
             salt = str(data.get("salt") or "")
             expected_hash = str(data.get("password_hash") or "")
             secret = str(data.get("session_secret") or "")
-            user_ok = hmac.compare_digest(username.strip(), expected_user)
+            user_ok = hmac.compare_digest(username.strip().encode("utf-8"), expected_user.encode("utf-8"))
             pass_ok = bool(salt and expected_hash) and hmac.compare_digest(
                 _hash_password(password, salt), expected_hash
             )

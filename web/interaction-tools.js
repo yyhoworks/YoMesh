@@ -209,39 +209,10 @@ nativeRenderProviders=function(section){renderProvidersBeforeSharing(section);co
     btn.innerHTML=userIcon;
     btn.onclick=()=>openAccountSettingsModal();
   }
-  let loginModalOpen=false;
-  window.openAuthLoginModal=function(info={}){
-    if(loginModalOpen)return;
-    loginModalOpen=true;
-    const defaultUser=info?.username||'admin';
-    showDialog('登录 YoMesh 工作台',`<form id="auth-login-form"><p class="preview-note" style="margin-top:0">工作台已启用密码保护。客户端订阅链接（<code>/s/...</code>）不受影响，仍可免密自动更新。</p><label class="field">用户名<input id="auth-login-user" autocomplete="username" value="${esc(defaultUser)}" required></label><label class="field">密码<input id="auth-login-pass" type="password" autocomplete="current-password" placeholder="请输入工作台密码" required></label><p class="error-message" id="auth-login-error" role="alert"></p><div class="dialog-actions"><button type="submit" class="button primary" id="auth-login-submit" style="width:100%">登录工作台</button></div></form>`);
-    const dialog=$('#dialog');
-    dialog.classList.add('auth-login-dialog');
-    const blockCancel=e=>{if(loginModalOpen)e.preventDefault()};
-    dialog.addEventListener('cancel',blockCancel);
-    dialog.addEventListener('close',()=>{dialog.classList.remove('auth-login-dialog');dialog.removeEventListener('cancel',blockCancel);loginModalOpen=false},{once:true});
-    setTimeout(()=>$('#auth-login-pass')?.focus(),50);
-    $('#auth-login-form').onsubmit=async e=>{
-      e.preventDefault();
-      const submit=$('#auth-login-submit');submit.disabled=true;submit.textContent='正在验证…';
-      $('#auth-login-error').textContent='';
-      try{
-        await api('/api/auth/login',{username:$('#auth-login-user').value.trim(),password:$('#auth-login-pass').value});
-        loginModalOpen=false;
-        dialog.close();
-        liveWorkspace.initializing=false;
-        await initializeWorkspace();
-        toast('欢迎回来，已登录 YoMesh 工作台。');
-      }catch(error){
-        $('#auth-login-error').textContent=error.message;
-        submit.disabled=false;submit.textContent='登录工作台';
-      }
-    };
-  };
-
   async function openAccountSettingsModal(){
-    let status={enabled:false,authenticated:true,username:'admin'};
-    try{status=await api('/api/auth/status')}catch{}
+    let status;
+    try{status=await api('/api/auth/status')}catch(error){toast(error.message);return}
+    if(!status.authenticated){redirectToLogin();return}
     showDialog('账号与密码设置',`
       <div class="auth-status-banner">
         <span>当前状态：<strong>${status.enabled?'已启用密码登录保护':'尚未设置密码（局域网免密访问）'}</strong></span>
@@ -268,10 +239,10 @@ nativeRenderProviders=function(section){renderProvidersBeforeSharing(section);co
     `);
     $('#auth-cancel-btn').onclick=()=>$('#dialog').close();
     if($('#auth-logout-btn'))$('#auth-logout-btn').onclick=async()=>{
-      await api('/api/auth/logout',{});
-      $('#dialog').close();
-      liveWorkspace.state=null;render();
-      window.openAuthLoginModal({username:status.username});
+      try {
+        await api('/api/auth/logout',{});
+        redirectToLogin('logout');
+      } catch(error) { $('#auth-settings-error').textContent=error.message; }
     };
     if($('#auth-disable-btn'))$('#auth-disable-btn').onclick=async()=>{
       const cur=$('#auth-cur-pass')?.value||'';

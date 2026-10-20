@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark-glass">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>登录 · YoMesh</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="login.css">
+  <script src="login.js" defer></script>
+</head>
+<body class="login-page">
+  <div class="wallpaper-layer" aria-hidden="true"></div>
+  <main class="login-main">
+    <section class="panel login-panel" aria-labelledby="login-title">
+      <div class="login-brand"><img src="assets/yomesh-logo.png" alt="" width="40" height="40"><strong>YoMesh</strong></div>
+      <h1 id="login-title">登录工作台</h1>
+      <p id="login-description">输入账号与密码，继续管理你的配置。</p>
+      <form id="login-form" aria-describedby="login-description">
+        <label class="field" for="login-user">用户名
+          <input id="login-user" name="username" autocomplete="username" maxlength="32" autocapitalize="none" spellcheck="false" required>
+        </label>
+        <div class="field">
+          <label for="login-password">密码</label>
+          <span class="login-password-field">
+            <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+            <button class="text-button login-reveal" type="button" id="login-reveal" aria-label="显示密码" aria-controls="login-password" aria-pressed="false">显示</button>
+          </span>
+        </div>
+        <p class="login-status" id="login-status" role="status" aria-live="polite">正在检查登录状态…</p>
+        <p class="error-message" id="login-error" role="alert" hidden></p>
+        <button class="button primary login-submit" id="login-submit" type="submit" disabled>登录工作台</button>
+        <button class="button login-retry" id="login-retry" type="button" hidden>重新连接</button>
+      </form>
+      <noscript><p class="error-message">请启用浏览器 JavaScript 后刷新页面，以完成登录。</p></noscript>
+    </section>
+    <p class="login-footnote">此登录仅保护管理工作台。<br>已发布的客户端订阅链接不受影响。</p>
+  </main>
+</body>
+</html>

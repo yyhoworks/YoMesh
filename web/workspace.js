@@ -6,7 +6,12 @@ const legacySources=clone(data.sources);
 const actionIconPaths={refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 11-2l3 3M18 17a7 7 0 0 1-11 2l-3-3',test:'M4 18a9 9 0 1 1 16 0M12 13l4-5M7 18h10',edit:'M14 4l6 6M3 21l4-1L20 7a2 2 0 0 0-4-4L3 16z',power:'M12 2v9M6 5a9 9 0 1 0 12 0',trash:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7'};
 function actionIcon(name){return `<svg aria-hidden="true" viewBox="0 0 24 24"><path d="${actionIconPaths[name]}"/></svg>`}
 function workspaceHeaders(scope=spaceId){return scope?{'X-YoMesh-Space':scope}:{}}
-async function api(path,body,scope=spaceId){const response=await fetch(path,{...(body===undefined?{}:{method:'POST',body:JSON.stringify(body)}),headers:{'Content-Type':'application/json',...workspaceHeaders(scope)}});let value;try{value=await response.json()}catch{throw Error('服务器返回异常，请稍后重试。')}if(response.status===401&&!path.startsWith('/api/auth/')){if(typeof window.openAuthLoginModal==='function')setTimeout(()=>window.openAuthLoginModal(value),0)}if(!response.ok)throw Error(value.error||'请求失败');if(value&&typeof value==='object'){Object.defineProperty(value,'_spaceId',{value:scope});if(value.workspace)Object.defineProperty(value.workspace,'_spaceId',{value:scope})}return value}
+function redirectToLogin(reason='expired') {
+  clearInterval(liveWorkspace.poll);
+  liveWorkspace.state=null;
+  location.replace('/login.html?reason='+encodeURIComponent(reason)+location.hash);
+}
+async function api(path,body,scope=spaceId){const response=await fetch(path,{...(body===undefined?{}:{method:'POST',body:JSON.stringify(body)}),headers:{'Content-Type':'application/json',...workspaceHeaders(scope)}});let value;try{value=await response.json()}catch{throw Error('服务器返回异常，请稍后重试。')}if(response.status===401||value.auth_unavailable)redirectToLogin();if(!response.ok)throw Error(value.error||'请求失败');if(value&&typeof value==='object'){Object.defineProperty(value,'_spaceId',{value:scope});if(value.workspace)Object.defineProperty(value.workspace,'_spaceId',{value:scope})}return value}
 function serverTime(epoch){return epoch?new Date(epoch*1000).toLocaleString('zh-CN',{hour12:false}):'尚未更新'}
 function bytes(value){if(!Number.isFinite(value))return '—';const units=['B','KB','MB','GB','TB'];let i=0;while(value>=1024&&i<4){value/=1024;i++}return `${value.toFixed(i?1:0)} ${units[i]}`}
 function sourceStatus(id){return liveWorkspace.state?.source_status?.[id]||{}}

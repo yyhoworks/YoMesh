@@ -1,7 +1,7 @@
 'use strict';
 const navigationMedia=matchMedia('(max-width:780px)');
 const navigationShade=document.createElement('button');navigationShade.type='button';navigationShade.className='navigation-shade';navigationShade.setAttribute('aria-label','关闭导航');document.body.append(navigationShade);
-const mobileActions=document.createElement('div');mobileActions.className='mobile-sidebar-actions';mobileActions.innerHTML='<button class="button primary" data-mobile-control="export">生成配置</button><button class="text-button" data-mobile-control="appearance">外观设置</button>';$('.sidebar-bottom').before(mobileActions);
+const mobileActions=document.createElement('div');mobileActions.className='mobile-sidebar-actions';mobileActions.innerHTML='<button class="button primary" data-mobile-control="export">生成配置</button><button class="text-button" data-mobile-control="account-btn">账号与密码设置</button><button class="text-button" data-mobile-control="appearance">外观设置</button>';$('.sidebar-bottom').before(mobileActions);
 iconPaths.menu='M4 6h16M4 12h16M4 18h16';$('#open-navigation').innerHTML=icon('menu');
 $('#edit-current-space').innerHTML=actionIcon('edit');
 let navigationReturnFocus=null;

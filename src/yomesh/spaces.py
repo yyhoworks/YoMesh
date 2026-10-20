@@ -211,12 +211,18 @@ class ConfigurationSpaces:
 
     @contextmanager
     def resource_transaction(self, ids):
-        if self._resource_txn_active:
-            yield
-            return
         with self.lock, ExitStack() as stack:
+            if self._resource_txn_active:
+                yield
+                return
+            owners = set()
+            for ident in ids:
+                owner = self._item(ident)
+                while owner.get("source_space"):
+                    owner = self._item(owner["source_space"])
+                owners.add(owner["id"])
             states = {}
-            for ident in sorted(set(ids)):
+            for ident in sorted(owners):
                 workspace = self.runtime(ident).workspace
                 stack.enter_context(workspace.lock)
                 states[ident] = deepcopy(workspace.state)
@@ -231,6 +237,7 @@ class ConfigurationSpaces:
                 for ident, state in states.items():
                     self.runtime(ident).workspace.state = state
                 self._generation_preview_cache.clear()
+                self._group_summary_cache = {}
                 self._restore_resources(recovery)
                 journal.unlink()
                 raise
@@ -243,7 +250,7 @@ class ConfigurationSpaces:
         with self.lock:
             ident = self.state["active"] if ident is None else ident
             records = self.state.get("native_resources", [])
-            if not records or self._resource_txn_active:
+            if self._resource_txn_active:
                 return self._save_profile(value, revision, ident, share_scope)
             ids = [ident, *(b["space"] for r in records for b in r["bindings"])]
             with self.resource_transaction(ids):

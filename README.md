@@ -28,6 +28,8 @@ python scripts/yomesh.py serve --port 8767
 
 默认只监听回环地址。需要其他设备访问时，显式设置监听与允许的 Host，并在账号设置中启用登录。真实订阅、节点凭据、证书和用户配置保存在被忽略的 `data/`，不要提交到仓库。
 
+启用密码保护后，未登录访问工作台会先进入独立的 `/login.html` 登录页，成功后返回工作台；退出登录和会话过期也回到该页面。桌面顶栏或手机导航中的“账号与密码设置”可管理账号及退出。尚未启用密码时保留免密模式，客户端订阅链接不受登录影响。凭据文件损坏或不可读时，管理访问会锁定；请恢复有效的 `data/auth.json` 备份或修正文件权限，不要通过删除凭据文件恢复访问。
+
 ## Docker / 群晖
 
 先下载并校验 Linux 内核，再构建镜像：
@@ -66,7 +68,7 @@ python scripts/yomesh.py export examples/profile.json --component dns --output o
 python -m unittest discover -s tests -v
 ```
 
-项目已有 226 项测试，覆盖原生加载、规则语义、隔离 DNS 查询、HTTP API、迁移报告、持久化与回滚。可选 LocalDNS 的测试会在对应程序未安装或平台不支持时明确跳过。内核加载与本机测试不代表真实订阅、外部节点、设备接管或上游连通性已验证。
+项目已有 236 项测试，覆盖原生加载、规则语义、隔离 DNS 查询、HTTP API、认证与独立登录页、迁移报告、持久化与回滚。可选 LocalDNS 的测试会在对应程序未安装或平台不支持时明确跳过。内核加载与本机测试不代表真实订阅、外部节点、设备接管或上游连通性已验证。
 
 更多说明：[兼容约定](docs/compatibility.md) · [架构](docs/architecture.md) · [规则工作台](docs/rule-workbench.md) · [MosDNS 能力边界](docs/mosdns-localdns-gap-analysis.md) · [发布隐私说明](docs/privacy.md)。
 

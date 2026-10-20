@@ -15,7 +15,7 @@ from .native import validate_bundle, find_core, serialize_config
 from .workspace import Conflict
 from .spaces import ConfigurationSpaces
 from .publication import Publications
-from .auth import AuthStore, SESSION_COOKIE, SESSION_TTL_SECONDS
+from .auth import AuthStore, AuthUnavailable, SESSION_COOKIE, SESSION_TTL_SECONDS
 
 
 def handler_for(root: Path, port: int, public_hosts=()):
@@ -69,7 +69,34 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 return super().log_message("%s", "subscription request (URL redacted)")
             return super().log_message(format, *args)
 
+        def send_head(self):
+            # Guard the HTML itself, including HEAD, query strings and encoded
+            # aliases. No workspace shell is delivered before authentication.
+            if not self.local_request():
+                self.send_error(403, "Host or origin not allowed")
+                return None
+            target = Path(self.translate_path(self.path)).resolve()
+            web = (root / "web").resolve()
+            if target in {web, web / "index.html"}:
+                try:
+                    user = self.authenticated_user()
+                except AuthUnavailable:
+                    user = None
+                if user is None:
+                    self.send_response(302)
+                    self.send_header("Location", "/login.html")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return None
+            return super().send_head()
+
         def do_GET(self):
+            try:
+                self._do_GET()
+            except AuthUnavailable as error:
+                self.json_response(503, {"error": str(error), "auth_unavailable": True})
+
+        def _do_GET(self):
             if self.path.startswith("/s/"):
                 match = re.fullmatch(r"/s/([A-Za-z0-9_-]{43})/(?:(mihomo\.yaml|sing-box\.json)|assets/([a-f0-9]{24}))", self.path)
                 try:
@@ -449,6 +476,8 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 self.send_header("Content-Length", str(len(raw)))
                 self.end_headers()
                 self.wfile.write(raw)
+            except AuthUnavailable as error:
+                self.json_response(503, {"error": str(error), "auth_unavailable": True})
             except Conflict as error:
                 self.json_response(409, {"error": str(error)})
             except (ConfigError, ValueError, TypeError, KeyError) as error:
