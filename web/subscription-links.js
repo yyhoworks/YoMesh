@@ -10,7 +10,7 @@ async function openSubscriptionLink(){
   try{listing=await api('/api/workspace/subscriptions')}catch(error){toast(error.message);return}
   const native=nativeMode(),savedLink=listing.links.at(-1);
   showDialog('配置订阅链接',`<form id="subscription-form">
-    <p class="export-scope">${esc(activeSpace()?.name||'当前配置空间')} · 在 Bettbox 等客户端中通过链接导入</p>
+    <p class="export-scope">${esc(activeSpace()?.name||'当前配置空间')} · 在 LocalDNS 的 Mihomo / sing-box 管理器或客户端中填入此链接即可自动拉取配置</p>
     <section id="subscription-result" ${savedLink?'':'hidden'} aria-live="polite"><label class="field">配置订阅链接<input id="subscription-url" type="text" readonly spellcheck="false" value="${esc(savedLink?.url||'')}"></label><p class="preview-note" id="subscription-status">${esc(subscriptionDeliverySummary(savedLink))} 链接持有者可读取该配置，请妥善保存。</p><div class="dialog-actions"><button class="button" id="subscription-revoke" type="button">停用此链接</button><button class="button primary" id="subscription-copy" type="button">复制链接</button></div></section>
     <details class="it-subscription-settings" id="subscription-settings" ${savedLink?'':'open'}><summary>修改访问地址与规则地址</summary>
     ${native?'':`<label class="field">代理内核<select id="subscription-proxy"><option value="mihomo">Mihomo · YAML</option><option value="sing-box">sing-box · JSON</option></select></label>`}

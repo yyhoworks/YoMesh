@@ -1,2 +1,1 @@
 PyYAML==6.0.3
-paramiko==5.0.0

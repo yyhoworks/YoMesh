@@ -417,6 +417,53 @@ class ConfigurationSpaces:
             self._write()
             return {"id": ident, **self.snapshot()}
 
+    def import_profile(self, profile, name, revision, description="", proxy="mihomo", rule_output="local"):
+        """Create an isolated portable configuration space from an imported profile."""
+        from .workspace import clean_source, next_update
+        with self.lock:
+            self._revision(revision)
+            if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80:
+                raise ConfigError("名称需要 1–80 个字符")
+            if any(s["name"] == name.strip() for s in self.state["spaces"]):
+                raise ConfigError("配置空间名称已存在")
+            if len(self.state["spaces"]) >= 32:
+                raise ConfigError("最多保存 32 个配置空间")
+            if proxy not in {"mihomo", "sing-box"} or rule_output not in {"remote", "local", "inline"}:
+                raise ConfigError("配置内核或规则输出方式无效")
+            candidate = deepcopy(profile)
+            sources = [clean_source(source) for source in candidate.get("sources", [])]
+            candidate["sources"] = sources
+            validated = Profile(candidate).data
+            ident = "space_" + uuid.uuid4().hex
+            workspace = Workspace(self.directory / "spaces" / ident)
+            source_status = {}
+            for source in sources:
+                count = sum(n.get("source") == source["id"] for n in validated.get("nodes", []))
+                source_status[source["id"]] = {
+                    "detected_format": source["format"],
+                    "retained": count,
+                    "total": count,
+                    "filtered": 0,
+                    "skipped": 0,
+                    "issues": [],
+                    "refresh_state": "success" if count else "idle",
+                    "error": "",
+                    "next_update": next_update(source),
+                    "test_state": "not-tested",
+                    "test_error": "",
+                }
+            workspace.state.update(profile=validated, source_status=source_status, node_status={}, migrated=True)
+            workspace._write()
+            self.state["spaces"].append({
+                "id": ident,
+                "name": name.strip(),
+                "description": str(description)[:500],
+                "proxy": proxy,
+                "rule_output": rule_output,
+            })
+            self._write()
+            return {"id": ident, **self.snapshot()}
+
     def save(self, value, revision, ident=None, copy_from=None, workspace_revision=None):
         with self.lock, self.runtime(ident or copy_from or "default").workspace.lock:
             self._revision(revision)

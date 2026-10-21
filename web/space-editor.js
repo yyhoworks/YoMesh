@@ -5,16 +5,99 @@ const editorKinds={policies:'分流策略',groups:'节点组',rules:'规则',set
 function spaceEditorRows(kind){const e=spaceEditor,p=e.profile;return kind==='rules'?p.library:kind==='policies'&&e.selection.plan?p.routing_plans.find(plan=>plan.id===e.selection.plan)?.policies||[]:p[kind]||[]}
 function editorSelected(kind,ident){return spaceEditor.selection[kind]==null||spaceEditor.selection[kind].includes(ident)}
 function editorTargetOptions(selected){const p=spaceEditor.profile;return [['DIRECT','直连'],...p.groups.map(g=>[g.id,g.name]),...p.nodes.map(n=>[n.id,n.name])].map(([ident,name])=>`<option value="${esc(ident)}" ${ident===selected?'selected':''}>${esc(name)}</option>`).join('')}
+function readFilePayload(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>{const res=String(reader.result||''),idx=res.indexOf(',');resolve(idx>=0?res.slice(idx+1):res)};
+    reader.onerror=()=>reject(Error('读取文件失败'));
+    reader.readAsDataURL(file);
+  });
+}
+async function openConfigImport(){
+  try{await saveSpaceDrafts();await refreshSpaceCatalog()}catch(error){toast(error.message);return}
+  showDialog('导入现有配置',`<form id="config-import-form">
+    <p class="scope-editor-note">${badge('独立新方案','accent')} 支持直接导入 Mihomo (.yaml)、sing-box (.json)、YoMesh (.json) 或 .zip 配置包，并可选附带 LocalDNS 配置自动对齐端口与上游接线。</p>
+    <div class="fields">
+      <label class="field">方案名称<input id="ci-name" required maxlength="80" placeholder="例如：家庭网关 / LocalDNS 代理" value="导入配置"></label>
+      <label class="field">说明（可选）<input id="ci-description" maxlength="500" placeholder="例如：从现有 Mihomo / sing-box 导入"></label>
+    </div>
+    <label class="field">选择代理配置文件（.yaml / .yml / .json / .zip）<input id="ci-file" type="file" accept=".yaml,.yml,.json,.zip"></label>
+    <label class="field">或者直接粘贴配置内容（YAML / JSON）<textarea id="ci-text" class="mono" rows="6" spellcheck="false" placeholder="粘贴 Mihomo config.yaml 或 sing-box config.json 内容…"></textarea></label>
+    <details class="advanced-options" open>
+      <summary>LocalDNS 联动与导入方式</summary>
+      <label class="field" style="margin-top:10px">附加 LocalDNS 配置（可选，支持 localdns.json 或 LocalDNS .zip 配置包）<input id="ci-localdns-file" type="file" accept=".json,.zip"><small>上传后会自动提取 LocalDNS 监听端口与代理接线（mixed_port / dns_port / socks5）。</small></label>
+      <label class="field">空间类型<select id="ci-mode">
+        <option value="auto">自动识别（推荐：可同时输出 Mihomo 与 sing-box；含复杂 provider 时自动保留原生）</option>
+        <option value="portable">通用配置空间（可一键切换导出 Mihomo YAML 与 sing-box JSON）</option>
+        <option value="native">Mihomo 原生空间（100% 保留 proxy-providers / rule-providers 与 LocalDNS 目录）</option>
+      </select></label>
+      <label class="check-row"><input type="checkbox" id="ci-draft" checked>允许先导入为草稿（若原配置引用了本地缺失文件，可在导入后补充再校验）</label>
+    </details>
+    <p id="ci-error" class="error-message" role="alert"></p>
+    <div class="dialog-actions">
+      <button type="button" class="button" id="ci-cancel">取消</button>
+      <button type="submit" class="button primary" id="ci-submit">读取并创建方案</button>
+    </div>
+  </form>`);
+  $('#ci-file').onchange=e=>{
+    const f=e.target.files?.[0];
+    if(f&&($('#ci-name').value==='导入配置'||!$('#ci-name').value.trim())){
+      $('#ci-name').value=f.name.replace(/\.(yaml|yml|json|zip)$/i,'')||'导入配置';
+    }
+  };
+  $('#ci-cancel').onclick=()=>$('#dialog').close();
+  $('#config-import-form').onsubmit=async e=>{
+    e.preventDefault();
+    const btn=$('#ci-submit');btn.disabled=true;$('#ci-error').textContent='';
+    try{
+      const file=$('#ci-file').files?.[0],text=$('#ci-text').value.trim(),dnsFile=$('#ci-localdns-file').files?.[0];
+      if(!file&&!text)throw Error('请选择代理配置文件，或直接粘贴配置内容。');
+      if(file&&file.size>20*1024*1024)throw Error('配置文件不能超过 20 MiB。');
+      if(dnsFile&&dnsFile.size>20*1024*1024)throw Error('LocalDNS 配置文件不能超过 20 MiB。');
+      const payload={
+        name:$('#ci-name').value.trim()||'导入配置',
+        description:$('#ci-description').value.trim(),
+        mode:$('#ci-mode').value,
+        draft:$('#ci-draft').checked,
+        revision:spaceCatalog.revision
+      };
+      if(file){
+        payload.filename=file.name;
+        if(/\.zip$/i.test(file.name))payload.content_base64=await readFilePayload(file);
+        else payload.content=await file.text();
+      }else{
+        payload.filename='pasted-config';
+        payload.content=text;
+      }
+      if(dnsFile){
+        payload.localdns_filename=dnsFile.name;
+        if(/\.zip$/i.test(dnsFile.name))payload.localdns_base64=await readFilePayload(dnsFile);
+        else payload.localdns_content=await dnsFile.text();
+      }
+      const result=await api('/api/spaces/import-config',payload);
+      spaceCatalog=result;
+      $('#dialog').close();
+      await switchSpace(result.id);
+      const summary=result.import_summary;
+      toast(summary?`已导入「${summary.format}」配置（${summary.nodes||0} 节点 / ${summary.groups||0} 节点组）`:'配置已导入到新方案。');
+    }catch(error){
+      $('#ci-error').textContent=error.message;
+      btn.disabled=false;
+    }
+  };
+}
 function paintSpaceCards(){
   const entries=spaceCatalog?.spaces||[];
   const currentDns=nativeMode()?nativeDnsName():'MosDNS';
-  $('#content').innerHTML=`<div class="configuration-overview"><div><h2>代理配置</h2><p>节点订阅 / 全部节点 → 节点分组 → 分流规则 → 接入与基础设置</p><span>按方案独立保存与组合，导出 Mihomo YAML 或 sing-box JSON。</span></div><div><h2>${currentDns} 配置</h2><p>独立上游、解析规则、缓存与监听；原生空间保留原内核</p><button type="button" class="text-button" id="space-open-dns">配置当前 ${currentDns} ${icon('arrow')}</button></div></div><div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{
+  $('#content').innerHTML=`<div class="configuration-overview"><div><h2>代理配置与导入</h2><p>支持直接读取现有 Mihomo YAML、sing-box JSON 与 LocalDNS 配置，按方案独立维护。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button primary" id="space-import-config">导入现有配置</button><button type="button" class="button" id="space-open-subscription">获取订阅链接（联动 LocalDNS）</button></div></div><div><h2>${currentDns} 配置</h2><p>独立上游、解析规则、缓存与监听；在 LocalDNS 的代理管理器中填入订阅链接即可联动更新。</p><button type="button" class="text-button" id="space-open-dns">配置当前 ${currentDns} ${icon('arrow')}</button></div></div><div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{
     const current=s.id===spaceId,counts=s.counts||{},g=s.generation||{},issues=g.excluded_policies?.length||0,dnsLabel=s.dns_engine==='localdns'?'LocalDNS':s.dns_engine==='mosdns'||!s.native?'MosDNS':'DNS';
     const actions=current
       ?`<button class="button primary" data-space-export="${esc(s.id)}">${actionIcon('download')}导出代理</button><button class="button" data-space-subscription="${esc(s.id)}">订阅链接</button><button class="button" data-space-configure="${esc(s.id)}">去配置规则</button><button class="text-button" data-space-dns="${esc(s.id)}">${dnsLabel} 配置</button>${resourceMenu(s.name,`<button data-space-edit="${esc(s.id)}">${s.native?'修改名称与说明':'编辑方案选用'}</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" disabled>${s.id==='default'?'默认方案保留':'切换后可删除'}</button>`)}`
       :`<button class="button primary" data-space-use="${esc(s.id)}">切换到此方案</button><button class="button" data-space-edit="${esc(s.id)}">${s.native?'改名 / 说明':'编辑选用'}</button><button class="button" data-space-copy="${esc(s.id)}">复制为新方案</button>${resourceMenu(s.name,`<button data-space-subscription="${esc(s.id)}">切换并查看订阅链接</button><button data-space-export="${esc(s.id)}">切换并导出代理</button><button data-space-dns="${esc(s.id)}">切换并配置 ${dnsLabel}</button><button class="danger-action" data-space-delete="${esc(s.id)}" ${s.id==='default'?'disabled':''}>${s.id==='default'?'默认方案保留':'删除此方案'}</button>`)}`;
     return `<article class="panel space-card ${current?'selected':''}" aria-label="${esc(s.name)}配置空间"><div class="space-card-heading"><div><h2>${esc(s.name)}</h2><p>${s.native?'Mihomo YAML':s.proxy==='sing-box'?'sing-box JSON':'Mihomo YAML'} · ${s.native?'原生引用与缓存':{inline:'内联规则',local:'本地文件引用',remote:'远程订阅引用'}[s.rule_output]||'内联规则'}</p></div>${current?badge('当前使用中','accent'):badge('未激活')}</div><p class="space-description">${esc(s.description||'节点组 + 规则 + 分流策略的生成方案')}</p><div class="space-counts"><span><b>${counts.groups||0}</b> 节点组</span><span><b>${counts.library||0}</b> 规则</span><span><b>${counts.policies||0}</b> 策略</span></div><p class="space-readiness ${g.error?'error-message':'generation-ready'}">${g.error?esc(g.error):g.valid?'代理选用检查通过':'等待代理检查'}${issues?` · 跳过 ${issues} 条策略`:''}</p><div class="space-card-actions">${actions}</div></article>`;
   }).join('')}</div><p class="preview-note">“当前使用中”表示左侧导航正在编辑该方案。切换方案或导出前都会自动执行原生内核校验。</p>`;
+  $('#space-import-config').onclick=openConfigImport;
+  $('#space-open-subscription').onclick=openSubscriptionLink;
   $('#space-open-dns').onclick=()=>{location.hash='dns'};
   $$('[data-space-configure]').forEach(b=>b.onclick=()=>{location.hash='library'});
   $$('[data-space-dns]').forEach(b=>b.onclick=async()=>{try{await switchSpace(b.dataset.spaceDns);location.hash='dns'}catch(error){toast(error.message)}});

@@ -130,7 +130,7 @@ render=function(){
   $('#base-config').hidden=true;
   const footer=$$('.workspace-footer span');if(footer[0])footer[0].textContent=page==='dns'?(nativeMode()?nativeDNSAvailable()?'LocalDNS 独立配置':'Mihomo 内置 DNS':'MosDNS 独立配置'):'Mihomo / sing-box 代理配置';if(footer[1])footer[1].textContent='代理与 DNS 分别导出';
   if(page!=='library')nativeRuleSourceMode=false;
-  if(!nativeMode()||['spaces','sync'].includes(page)){$('#create').onclick=createPortableWorkspace;renderPortableWorkspace();return}
+  if(!nativeMode()||page==='spaces'){$('#create').onclick=createPortableWorkspace;renderPortableWorkspace();return}
   for(const selector of ['#create','#space-select','#export','#base-config','#edit-current-space'])$(selector).disabled=false;
   paintSpaceSelect();nav();
   $('#breadcrumb').textContent=page==='dns'?nativeDnsName():pages[page][0];$('#page-title').textContent=page==='dns'?nativeDnsName():pages[page][0];$('#page-description').className='resource-scope';$('#page-description').innerHTML=badge('独立原生方案','accent')+'<span>仅影响「'+esc(activeSpace()?.name)+'」 · '+(nativeDNSAvailable()?'保留原有 Mihomo / LocalDNS 能力':'完整保留原生 Mihomo 配置')+'</span>';
