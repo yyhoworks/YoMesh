@@ -44,7 +44,7 @@ def clean_source(value, existing=None):
     source = {"id": existing.get("id") or value.get("id") or "s_" + uuid.uuid4().hex[:12]}
     if not isinstance(source["id"], str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", source["id"]) or source["id"] in {"manual", "DIRECT", "REJECT"}:
         raise ConfigError("订阅 ID 无效")
-    for key, default in {"name": "", "url": "", "note": "", "format": "auto", "user_agent": "clash.meta", "include": "", "exclude": "", "disabled_protocols": [], "enabled": True, "auto_update": True, "interval_hours": 24, "schedule_mode": "interval", "daily_time": "04:00", "test_url": "https://www.gstatic.com/generate_204", "test_timeout_ms": 3000, "request_timeout": 20}.items():
+    for key, default in {"name": "", "url": "", "note": "", "format": "auto", "user_agent": "clash.meta", "include": "", "exclude": "", "disabled_protocols": [], "enabled": True, "auto_update": True, "interval_hours": 24, "schedule_mode": "interval", "daily_time": "04:00", "test_url": "https://www.gstatic.com/generate_204", "test_timeout_ms": 3000, "request_timeout": 20, "allow_private": False}.items():
         source[key] = deepcopy(value.get(key, existing.get(key, default)))
     if not isinstance(source["name"], str) or not source["name"].strip() or len(source["name"]) > 80:
         raise ConfigError("订阅名称需要为 1–80 字符")
@@ -62,9 +62,9 @@ def clean_source(value, existing=None):
         pattern(source[key], key)
     if not isinstance(source["disabled_protocols"], list) or not all(isinstance(x, str) for x in source["disabled_protocols"]):
         raise ConfigError("禁用协议需要文本数组")
-    for key in ("enabled", "auto_update"):
+    for key in ("enabled", "auto_update", "allow_private"):
         if not isinstance(source[key], bool):
-            raise ConfigError("启用开关需要布尔值")
+            raise ConfigError("开关字段需要布尔值")
     for key, low, high in (("interval_hours", 1, 720), ("request_timeout", 3, 120), ("test_timeout_ms", 500, 30000)):
         if type(source[key]) is not int or not low <= source[key] <= high:
             raise ConfigError(f"{key} 需要在 {low}–{high} 范围内")

@@ -251,7 +251,7 @@ def prepare_request(native, request, fetch=False):
             if behavior not in {"auto", "classical"}:
                 raise ConfigError("完整规则列表需要 classical 类型")
             updated.setdefault("rule_source_adapters", {})[name] = {"format": "clash-rules"}
-        providers[name] = {"type": "http", "behavior": "classical" if behavior == "auto" else behavior, "format": "yaml", "url": url, "path": "ruleset/user-" + uuid.uuid4().hex + ".yaml", "interval": 86400}
+        providers[name] = {"type": "http", "behavior": "classical" if behavior == "auto" else behavior, "format": "yaml", "url": url, "path": "ruleset/user-" + uuid.uuid4().hex + ".yaml", "interval": 86400, "allow_private": bool(source.get("allow_private", False))}
         if fetch:
             updated = refresh_provider(updated, "rule-providers", name)
             providers = updated["mihomo"]["rule-providers"]

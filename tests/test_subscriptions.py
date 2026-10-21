@@ -113,7 +113,7 @@ class SubscriptionTests(unittest.TestCase):
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         Thread(target=server.serve_forever, daemon=True).start()
         try:
-            self.source.update(url=f"http://127.0.0.1:{server.server_port}/sub", user_agent="YoMesh-test")
+            self.source.update(url=f"http://127.0.0.1:{server.server_port}/sub", user_agent="YoMesh-test", allow_private=True)
             nodes, stats = fetch_subscription(self.source)
             self.assertEqual((len(nodes), seen, stats["traffic"]["download"]), (1, ["YoMesh-test"], 2))
         finally:

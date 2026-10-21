@@ -63,17 +63,17 @@ class NativeYamlRuleTests(unittest.TestCase):
     def test_http_refresh_keeps_rules_source_and_rejects_bad_refresh_atomically(self):
         value = native()
         original = deepcopy(value)
-        with patch("urllib.request.urlopen", return_value=io.BytesIO(SOURCE.encode())):
+        with patch("yomesh.native_configuration.guarded_fetch", return_value=(SOURCE.encode(), {})):
             refreshed = refresh_provider(value, "rule-providers", "one")
         self.assertEqual(refreshed, original)
-        with patch("urllib.request.urlopen", return_value=io.BytesIO(b"rules: [null]")):
+        with patch("yomesh.native_configuration.guarded_fetch", return_value=(b"rules: [null]", {})):
             with self.assertRaises(ConfigError):
                 refresh_provider(value, "rule-providers", "one")
         self.assertEqual(value, original)
 
     def test_new_rules_source_auto_detects_classical_without_rewriting(self):
         request = {"draft": {"name": "native-alias", "mode": "rules", "rules": [], "target": "DIRECT"}, "sources": [{"url": "https://rules.example.test/home.yaml"}]}
-        with patch("urllib.request.urlopen", return_value=io.BytesIO(SOURCE.encode())):
+        with patch("yomesh.native_configuration.guarded_fetch", return_value=(SOURCE.encode(), {})):
             updated, row = prepare_request(fixture(), request, fetch=True)
         provider = updated["mihomo"]["rule-providers"]["native-alias"]
         self.assertEqual(provider["behavior"], "classical")

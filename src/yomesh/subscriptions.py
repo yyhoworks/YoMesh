@@ -9,12 +9,12 @@ import io
 import json
 import re
 from urllib.parse import parse_qs, unquote, urlsplit
-from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
 import yaml
 
 from .model import ConfigError, Profile, pattern
+from .netguard import guarded_fetch
 
 FORMATS = {"auto", "clash", "sing-box", "base64", "uri", "surge"}
 SUPPORTED = {"shadowsocks", "trojan", "vmess", "vless", "hysteria2"}
@@ -294,25 +294,31 @@ def parse_subscription(content, source):
 
 def fetch_subscription(source):
     url = source["url"]
-    request = Request(url, headers={"User-Agent": source.get("user_agent") or "clash.meta", "Accept": "*/*"})
+    headers = {"User-Agent": source.get("user_agent") or "clash.meta", "Accept": "*/*"}
     try:
-        with urlopen(request, timeout=source.get("request_timeout", 20)) as response:
-            body = response.read(MAX_BYTES + 1)
+        body, response_headers = guarded_fetch(
+            url,
+            timeout=source.get("request_timeout", 20),
+            max_bytes=MAX_BYTES,
+            headers=headers,
+            allow_private=source.get("allow_private", False),
+            what="订阅地址",
+        )
+        if len(body) > MAX_BYTES:
+            raise ConfigError("订阅超过 8 MiB，已停止读取")
+        if response_headers.get("Content-Encoding", "").lower() == "gzip":
+            with gzip.GzipFile(fileobj=io.BytesIO(body)) as unpacked:
+                body = unpacked.read(MAX_BYTES + 1)
             if len(body) > MAX_BYTES:
-                raise ConfigError("订阅超过 8 MiB，已停止读取")
-            if response.headers.get("Content-Encoding", "").lower() == "gzip":
-                with gzip.GzipFile(fileobj=io.BytesIO(body)) as unpacked:
-                    body = unpacked.read(MAX_BYTES + 1)
-                if len(body) > MAX_BYTES:
-                    raise ConfigError("解压后的订阅超过 8 MiB")
-            userinfo = response.headers.get("Subscription-Userinfo", "")
-            info = {}
-            for part in userinfo.split(";"):
-                key, _, value = part.strip().partition("=")
-                if key in {"upload", "download", "total", "expire"} and value.isdigit():
-                    info[key] = int(value)
-            nodes, stats = parse_subscription(body, source)
-            return nodes, {**stats, "traffic": info}
+                raise ConfigError("解压后的订阅超过 8 MiB")
+        userinfo = response_headers.get("Subscription-Userinfo", "")
+        info = {}
+        for part in userinfo.split(";"):
+            key, _, value = part.strip().partition("=")
+            if key in {"upload", "download", "total", "expire"} and value.isdigit():
+                info[key] = int(value)
+        nodes, stats = parse_subscription(body, source)
+        return nodes, {**stats, "traffic": info}
     except HTTPError as exc:
         raise ConfigError(f"上游返回 HTTP {exc.code}；请检查地址、UA 或订阅状态") from None
     except (URLError, TimeoutError, OSError):

@@ -17,6 +17,7 @@ from pathlib import PurePosixPath
 import yaml
 
 from .model import ConfigError
+from .netguard import guarded_fetch
 
 FORMAT = "mihomo-localdns-v1"
 PROXY_FORMAT = "mihomo-v1"
@@ -360,7 +361,6 @@ def bundle(value, proxy, rule_output, component="both"):
 
 
 def refresh_provider(value, section, name):
-    from urllib.request import Request, urlopen
     native = checked(value)
     if section not in {"proxy-providers", "rule-providers"}:
         raise ConfigError("请选择节点订阅或规则订阅")
@@ -372,8 +372,14 @@ def refresh_provider(value, section, name):
     for key, val in provider.get("header", {}).items():
         headers[key] = val[0] if isinstance(val, list) else val
     try:
-        with urlopen(Request(provider["url"], headers=headers), timeout=25) as response:
-            raw = response.read(8 * 1024 * 1024 + 1)
+        raw, _ = guarded_fetch(
+            provider["url"],
+            timeout=25,
+            max_bytes=8 * 1024 * 1024,
+            headers=headers,
+            allow_private=provider.get("allow_private", False),
+            what="规则上游地址",
+        )
         if len(raw) > 8 * 1024 * 1024:
             raise ConfigError("订阅内容超过 8 MiB")
         if path.endswith((".mrs", ".srs")):

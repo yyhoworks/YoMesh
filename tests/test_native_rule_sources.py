@@ -46,7 +46,7 @@ class NativeRuleSourceTests(unittest.TestCase):
         n = fixture()
         before = deepcopy(n)
         url = f"http://127.0.0.1:{server.server_port}/home.yaml"
-        request = {"action": "unit-save", "draft": {"name": "HomeLAN", "mode": "rules", "rules": [], "target": "直连组"}, "sources": [{"url": url, "source_format": "clash-rules"}], "outlet": {"type": "select", "members": ["DIRECT"], "default": "DIRECT"}}
+        request = {"action": "unit-save", "draft": {"name": "HomeLAN", "mode": "rules", "rules": [], "target": "直连组"}, "sources": [{"url": url, "source_format": "clash-rules", "allow_private": True}], "outlet": {"type": "select", "members": ["DIRECT"], "default": "DIRECT"}}
         try:
             result = change(n, request)
             adapter = result["rule_source_adapters"]["HomeLAN"]

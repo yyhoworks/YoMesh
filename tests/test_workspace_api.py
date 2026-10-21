@@ -200,7 +200,7 @@ class WorkspaceAPITests(unittest.TestCase):
         self.assertEqual(item["source"]["filename"], "rules.yaml")
 
     def add_source(self, name="fixture", ident=None):
-        source = {"name": name, "url": f"http://127.0.0.1:{self.upstream.server_port}/sub", "auto_update": False}
+        source = {"name": name, "url": f"http://127.0.0.1:{self.upstream.server_port}/sub", "auto_update": False, "allow_private": True}
         if ident:
             source["id"] = ident
         return self.request("/api/sources", {"source": source, "revision": self.state()["revision"]})

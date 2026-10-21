@@ -88,7 +88,7 @@ class NativePolicyTests(unittest.TestCase):
         http = ThreadingHTTPServer(("127.0.0.1",0),Source)
         threading.Thread(target=http.serve_forever,daemon=True).start()
         url=f"http://127.0.0.1:{http.server_port}"
-        request={"action":"save","draft":{"mode":"rules","name":"新规则","rules":[],"target":"DIRECT"},"sources":[{"url":url+"/ok"}]}
+        request={"action":"save","draft":{"mode":"rules","name":"新规则","rules":[],"target":"DIRECT"},"sources":[{"url":url+"/ok","allow_private":True}]}
         try:
             preview,row=prepare_request(n,request,fetch=False)
             self.assertEqual(n,original)
@@ -96,7 +96,7 @@ class NativePolicyTests(unittest.TestCase):
             updated=change(n,request)
             self.assertEqual(updated["mihomo"]["rule-providers"]["新规则"]["behavior"],"domain")
             self.assertIn("新规则",updated["policies"][-2]["text"])
-            request["sources"].append({"url":url+"/bad"})
+            request["sources"].append({"url":url+"/bad","allow_private":True})
             with self.assertRaises(ConfigError):change(n,request)
             self.assertEqual(n,original)
         finally:http.shutdown();http.server_close()
