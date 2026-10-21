@@ -41,7 +41,7 @@ class FilterRoundTripTests(unittest.TestCase):
         self.assertNotIn("exclude-type", group_candidate(native(), {"group": group, "filters": filters}))
 
     def test_custom_conditions_never_disappear_or_get_guessed_as_region(self):
-        group = {"name": "test", "type": "select", "filter": ".*(美国.*DMIT|DMIT.*美国).*", "exclude-filter": "private.*", "exclude-type": "Vless"}
+        group = {"name": "test", "type": "select", "filter": ".*(美国.*VendorA|VendorA.*美国).*", "exclude-filter": "private.*", "exclude-type": "Vless"}
         view = group_filter_view(group)
         self.assertEqual(view["region"], "")
         self.assertTrue(view["custom_include"])

@@ -1343,7 +1343,7 @@ function openClientControllerModal(targetSpaceId){
     <p class="scope-editor-note">${badge('零 Agent 实时推送','accent')} 绑定局域网内客户端（如 OpenWrt / Clash Party / 软路由 Mihomo）的 External Controller 地址后，在网页改规则或用 Hermes 一句话加规则时，YoMesh 会自动调用 <code>PUT /configs?force=true</code> 触发客户端 0 秒热重载。</p>
     <label class="check-row" style="margin:10px 0"><input type="checkbox" id="cc-enabled" ${ctrl.enabled?'checked':''}>启用保存后自动热重载推送</label>
     <div class="fields">
-      <label class="field">Mihomo External Controller 地址<input id="cc-url" type="url" placeholder="例如：http://192.168.8.2:9090" value="${esc(ctrl.url||'')}"><small>对应 Mihomo 配置中的 <code>external-controller</code> 地址。</small></label>
+      <label class="field">Mihomo External Controller 地址<input id="cc-url" type="url" placeholder="例如：http://192.168.1.2:9090" value="${esc(ctrl.url||'')}"><small>对应 Mihomo 配置中的 <code>external-controller</code> 地址。</small></label>
       <label class="field">Controller Secret 密钥（可选）<input id="cc-secret" type="password" placeholder="若未设置 secret 可留空" value="${esc(ctrl.secret||'')}"><small>对应 Mihomo 配置中的 <code>secret</code> 字段。</small></label>
     </div>
     ${ctrl.last_status?`<p class="preview-note">上次连接状态：<strong>${esc(ctrl.last_status)}</strong>${ctrl.last_error?' · '+esc(ctrl.last_error):''}</p>`:''}
@@ -1359,7 +1359,7 @@ function openClientControllerModal(targetSpaceId){
     const btn=$('#cc-submit');btn.disabled=true;$('#cc-error').textContent='';
     try{
       const enabled=$('#cc-enabled').checked,url=$('#cc-url').value.trim(),secret=$('#cc-secret').value.trim();
-      if(enabled&&!url)throw Error('启用自动热重载时，请填写客户端 Controller 地址（如 http://192.168.8.2:9090）。');
+      if(enabled&&!url)throw Error('启用自动热重载时，请填写客户端 Controller 地址（如 http://192.168.1.2:9090）。');
       const saved=await api('/api/spaces/client-controller',{space_id:s.id,enabled,url,secret});
       spacePresetsCache.controllers??={};
       spacePresetsCache.controllers[s.id]=saved;
@@ -1425,7 +1425,7 @@ async function renderHermesPage(){
         </div>
         <ul style="margin:8px 0 12px 18px;font-size:13px;line-height:1.8">
           <li><strong>查分流原因</strong>（<code>yomesh_diagnose_domain</code>）：“帮我查一下 <code>api.anthropic.com</code> 在 YoMesh 里命中了哪条规则、走哪个出口？”</li>
-          <li><strong>一句话置顶加规则</strong>（<code>yomesh_add_rule</code>）：“把 <code>claude.ai, cursor.sh</code> 加到美国节点”、“把 <code>192.168.8.0/24</code> 设为直连 DIRECT”（新规则自动置顶到第 1 条，并支持模糊匹配节点组）</li>
+          <li><strong>一句话置顶加规则</strong>（<code>yomesh_add_rule</code>）：“把 <code>claude.ai, cursor.sh</code> 加到美国节点”、“把 <code>192.168.1.0/24</code> 设为直连 DIRECT”（新规则自动置顶到第 1 条，并支持模糊匹配节点组）</li>
           <li><strong>节点延迟测速</strong>（<code>yomesh_test_nodes</code>）：“帮我测速一下当前配置空间的节点，看看哪个香港节点延迟最低”</li>
           <li><strong>获取订阅链接</strong>（<code>yomesh_subscription_link</code>）：“把当前空间的 Mihomo 订阅链接发给我，我要填到 LocalDNS”</li>
           <li><strong>查看配置空间</strong>（<code>yomesh_list_spaces</code>）：“列出我当前在 YoMesh 里的所有配置空间和节点统计”</li>

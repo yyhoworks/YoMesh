@@ -21,15 +21,15 @@ from yomesh.native_policy import change
 from yomesh.native_rule_groups import rule_groups
 from yomesh.native_rule_sources import normalize_rule_list
 
-SOURCE = "rules:\n- IP-CIDR,198.51.100.0/24,BackHome,no-resolve\n- IP-CIDR6,fc00::/7,BackHome,no-resolve\n- DOMAIN-SUFFIX,lan,BackHome\n"
+SOURCE = "rules:\n- IP-CIDR,198.51.100.0/24,HomeLAN,no-resolve\n- IP-CIDR6,fc00::/7,HomeLAN,no-resolve\n- DOMAIN-SUFFIX,lan,HomeLAN\n"
 
 
 class NativeRuleSourceTests(unittest.TestCase):
     def test_normalization_retains_predicates_suffixes_and_source_label(self):
         body, label = normalize_rule_list(SOURCE)
-        self.assertEqual(label, "BackHome")
+        self.assertEqual(label, "HomeLAN")
         self.assertEqual(yaml.safe_load(body)["payload"], ["IP-CIDR,198.51.100.0/24,no-resolve", "IP-CIDR6,fc00::/7,no-resolve", "DOMAIN-SUFFIX,lan"])
-        for invalid in (SOURCE + "other: true\n", SOURCE.replace("lan,BackHome", "lan,DIRECT"), "rules:\n- DST-PORT,70000,DIRECT\n", "rules:\n- MATCH,DIRECT\n", "rules:\n- OR,((NETWORK,udp),(DST-PORT,443)),DIRECT\n"):
+        for invalid in (SOURCE + "other: true\n", SOURCE.replace("lan,HomeLAN", "lan,DIRECT"), "rules:\n- DST-PORT,70000,DIRECT\n", "rules:\n- MATCH,DIRECT\n", "rules:\n- OR,((NETWORK,udp),(DST-PORT,443)),DIRECT\n"):
             with self.assertRaises(ConfigError):
                 normalize_rule_list(invalid)
 
@@ -46,22 +46,22 @@ class NativeRuleSourceTests(unittest.TestCase):
         n = fixture()
         before = deepcopy(n)
         url = f"http://127.0.0.1:{server.server_port}/home.yaml"
-        request = {"action": "unit-save", "draft": {"name": "BackHome", "mode": "rules", "rules": [], "target": "直连组"}, "sources": [{"url": url, "source_format": "clash-rules"}], "outlet": {"type": "select", "members": ["DIRECT"], "default": "DIRECT"}}
+        request = {"action": "unit-save", "draft": {"name": "HomeLAN", "mode": "rules", "rules": [], "target": "直连组"}, "sources": [{"url": url, "source_format": "clash-rules"}], "outlet": {"type": "select", "members": ["DIRECT"], "default": "DIRECT"}}
         try:
             result = change(n, request)
-            adapter = result["rule_source_adapters"]["BackHome"]
+            adapter = result["rule_source_adapters"]["HomeLAN"]
             self.assertEqual(result["documents"][adapter["source_path"]], SOURCE)
-            self.assertEqual(result["mihomo"]["rule-providers"]["BackHome"]["url"], url)
-            self.assertEqual(result["mihomo"]["rule-providers"]["BackHome"]["type"], "http")
-            view = next(u for u in rule_groups(result) if u["name"] == "BackHome")
+            self.assertEqual(result["mihomo"]["rule-providers"]["HomeLAN"]["url"], url)
+            self.assertEqual(result["mihomo"]["rule-providers"]["HomeLAN"]["type"], "http")
+            view = next(u for u in rule_groups(result) if u["name"] == "HomeLAN")
             self.assertEqual(view["source_settings"][0]["source_format"], "clash-rules")
             bundle = compile_bundle({"schema_version": 1, "fallback": "DIRECT", "native_configuration": result}, "mihomo", rule_output="remote", component="proxy")
-            provider = yaml.safe_load(bundle["files"]["mihomo.yaml"])["rule-providers"]["BackHome"]
+            provider = yaml.safe_load(bundle["files"]["mihomo.yaml"])["rule-providers"]["HomeLAN"]
             self.assertEqual(provider["type"], "file")
             self.assertEqual(provider["url"], url)
-            self.assertEqual(bundle["manifest"]["rule_output"]["adapters"][0]["source_target"], "BackHome")
+            self.assertEqual(bundle["manifest"]["rule_output"]["adapters"][0]["source_target"], "HomeLAN")
             self.assertEqual(validate_bundle(bundle, ROOT)["status"], "passed")
-            self.assertEqual(refresh_provider(result, "rule-providers", "BackHome"), result)
+            self.assertEqual(refresh_provider(result, "rule-providers", "HomeLAN"), result)
             self.assertEqual(n, before)
         finally:
             server.shutdown()

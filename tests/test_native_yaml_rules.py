@@ -16,7 +16,7 @@ from yomesh.native import validate_bundle
 from yomesh.native_configuration import checked, refresh_provider, resolve, rule_yaml_entries
 from yomesh.native_policy import prepare_request
 
-SOURCE = "rules:\n  - IP-CIDR,192.0.2.0/24,BackHome,no-resolve\n  - IP-CIDR6,2001:db8::/32,BackHome,no-resolve\n  - DOMAIN-SUFFIX,example.test,BackHome\n"
+SOURCE = "rules:\n  - IP-CIDR,192.0.2.0/24,HomeLAN,no-resolve\n  - IP-CIDR6,2001:db8::/32,HomeLAN,no-resolve\n  - DOMAIN-SUFFIX,example.test,HomeLAN\n"
 
 
 def native():

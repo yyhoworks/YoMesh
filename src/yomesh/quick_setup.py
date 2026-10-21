@@ -334,7 +334,7 @@ class ClientControllers:
                 raw_url = "http://" + raw_url
             parsed = urlsplit(raw_url)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-                raise ConfigError("请填写有效的 Mihomo 控制器地址，例如 http://192.168.8.2:9090")
+                raise ConfigError("请填写有效的 Mihomo 控制器地址，例如 http://192.168.1.2:9090")
             clean_url = f"{parsed.scheme}://{parsed.netloc}"
             existing = data["controllers"].get(space_id) or {}
             secret = payload.get("secret")

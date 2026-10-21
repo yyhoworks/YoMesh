@@ -214,16 +214,12 @@ class HermesMcpTests(unittest.TestCase):
             "PT-Domain",
             "Custom-Direct",
             "Custom-Proxy",
-            "BackHome",
             "NoQUIC",
-            "yyho",
             "19302",
             "5349",
             "3478",
-            "Dmit",
-            "华为云",
-            "甲骨云",
-            "backhome-",
+            "listeners:",
+            "nameserver-policy:",
         ]
         for key, raw_yaml in matches.items():
             yaml_text = raw_yaml.replace("\\\\b", "\\b")
