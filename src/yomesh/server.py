@@ -1,6 +1,7 @@
 """Static UI and native bundle export, with explicit host/origin allowlisting."""
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import re
@@ -146,20 +147,29 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 return
             if self.path.startswith("/api/setup/"):
                 name = self.path.removeprefix("/api/setup/")
-                if name not in {"yomesh_hermes_mcp.py", "hermes_installer.py"}:
+                want_digest = name.endswith(".sha256")
+                stem = name[: -len(".sha256")] if want_digest else name
+                if stem not in {"yomesh_hermes_mcp.py", "hermes_installer.py"}:
                     self.json_response(404, {"error": "安装文件不存在"})
                     return
                 try:
-                    raw = (root / "scripts" / name).read_bytes()
+                    raw = (root / "scripts" / stem).read_bytes()
                 except OSError:
                     self.json_response(503, {"error": "安装文件暂不可用，请检查 YoMesh 安装目录中的 scripts 文件夹"})
                     return
+                if want_digest:
+                    # Integrity value for the installer to verify before executing.
+                    body = (hashlib.sha256(raw).hexdigest() + "\n").encode("ascii")
+                    content_type = "text/plain; charset=utf-8"
+                else:
+                    body = raw
+                    content_type = "text/x-python; charset=utf-8"
                 self.send_response(200)
-                self.send_header("Content-Type", "text/x-python; charset=utf-8")
+                self.send_header("Content-Type", content_type)
                 self.send_header("Content-Disposition", f'attachment; filename="{name}"')
-                self.send_header("Content-Length", str(len(raw)))
+                self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
-                self.wfile.write(raw)
+                self.wfile.write(body)
                 return
             if self.path.startswith("/api/hermes/"):
                 if not hermes_access.verify(self.headers.get("Authorization")):

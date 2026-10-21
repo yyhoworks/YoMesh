@@ -2,13 +2,40 @@
 """One-line auto-installer for YoMesh Hermes MCP on the Hermes host."""
 from __future__ import annotations
 
+import hashlib
+import hmac
+import ipaddress
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
+
+
+def _allowed_url(raw_url: str) -> str:
+    """Validate YOMESH_URL before downloading executable code.
+
+    Same rule as the bridge script (scripts/yomesh_hermes_mcp.py::_allowed_url);
+    keep the two in sync. Only https, or http to localhost / loopback / private
+    addresses, is accepted.
+    """
+    url = str(raw_url or "").strip().rstrip("/")
+    parsed = urlsplit(url)
+    if parsed.scheme == "https" and parsed.hostname:
+        return url
+    if parsed.scheme == "http" and parsed.hostname:
+        if parsed.hostname == "localhost":
+            return url
+        try:
+            ip = ipaddress.ip_address(parsed.hostname)
+            if ip.is_loopback or ip.is_private:
+                return url
+        except ValueError:
+            pass
+    raise ValueError("YOMESH_URL 需使用 https:// 或局域网/本机 http:// 地址")
 
 
 def _write_private(path: Path, content: bytes | str, mode: int = 0o600) -> None:
@@ -63,10 +90,15 @@ def _update_hermes_yaml(config_path: Path, script_path: Path, bridge_json_path: 
 
 
 def main() -> int:
-    base_url = os.environ.get("YOMESH_URL", "").strip().rstrip("/")
+    raw_url = os.environ.get("YOMESH_URL", "").strip()
     token = os.environ.get("YOMESH_TOKEN", "").strip()
-    if not base_url or not token.startswith("ymh_"):
+    if not raw_url or not token.startswith("ymh_"):
         sys.stderr.write("缺少 YOMESH_URL 或 YOMESH_TOKEN 环境变量，请从 YoMesh 工作台复制完整安装命令。\n")
+        return 1
+    try:
+        base_url = _allowed_url(raw_url)
+    except ValueError as exc:
+        sys.stderr.write(f"YOMESH_URL 无效，已中止：{exc}\n")
         return 1
 
     home = Path.home()
@@ -75,9 +107,20 @@ def main() -> int:
     bridge_json_path = home / ".config/yomesh/hermes.json"
     hermes_config = home / ".hermes/config.yaml"
 
-    req = Request(f"{base_url}/api/setup/yomesh_hermes_mcp.py")
-    with urlopen(req, timeout=15) as resp:
+    script_url = f"{base_url}/api/setup/yomesh_hermes_mcp.py"
+    with urlopen(Request(script_url), timeout=15) as resp:
         mcp_code = resp.read()
+    # Integrity check before writing an executable script (fixes H2).
+    try:
+        with urlopen(Request(script_url + ".sha256"), timeout=15) as resp:
+            expected = resp.read(256).decode("ascii").strip().lower()
+    except Exception as exc:
+        sys.stderr.write(f"无法获取安装脚本的完整性校验值，已中止：{exc}\n")
+        return 1
+    actual = hashlib.sha256(mcp_code).hexdigest()
+    if not expected or not hmac.compare_digest(expected, actual):
+        sys.stderr.write("安装脚本完整性校验失败，已中止：请确认 YOMESH_URL 指向你自己的 YoMesh 服务。\n")
+        return 1
 
     _write_private(script_path, mcp_code, 0o700)
     _write_private(token_path, token + "\n", 0o600)
