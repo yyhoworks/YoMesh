@@ -18,13 +18,24 @@ function setNativeEditorReturn(done){
   dialog.addEventListener('close',nativeEditorReturn,{once:true});
 }
 
+const NODE_GROUP_TEMPLATES=[
+  {label:'🇭🇰 香港节点',name:'🇭🇰 香港节点',mode:'url-test',region:'HK',include:'(?i)(港|HK|Hong\\s*Kong)'},
+  {label:'🇹🇼 台湾节点',name:'🇹🇼 台湾节点',mode:'url-test',region:'TW',include:'(?i)(台|TW|Taiwan|Taipei)'},
+  {label:'🇯🇵 日本节点',name:'🇯🇵 日本节点',mode:'url-test',region:'JP',include:'(?i)(日|JP|Japan|Tokyo|Osaka)'},
+  {label:'🇸🇬 新加坡节点',name:'🇸🇬 新加坡节点',mode:'url-test',region:'SG',include:'(?i)(新|SG|Singapore|狮城)'},
+  {label:'🇺🇸 美国节点',name:'🇺🇸 美国节点',mode:'url-test',region:'US',include:'(?i)(美|US|United\\s*States|America)'},
+  {label:'🚀 默认代理',name:'🚀 默认代理',mode:'select',region:'',include:''}
+];
+function nodeGroupTemplateBar(attr='data-ng-template'){
+  return `<div class="rule-preset-bar" style="margin-bottom:12px"><div class="rule-preset-header"><span>📦 常用节点组模板（点击填入名称、模式与地区筛选，再自行勾选订阅或节点保存）</span></div><div class="rule-preset-pills">${NODE_GROUP_TEMPLATES.map((t,idx)=>`<button type="button" class="rule-preset-pill" ${attr}="${idx}">${esc(t.label)}</button>`).join('')}</div></div>`;
+}
 nativeGroupEditor=function(name=null,role='nodes',restored=null,done=null){
   const groups=nativeValue().mihomo['proxy-groups']||[],original=groups.find(g=>g.name===name),base=original||{name:'新节点组',type:'select',proxies:['DIRECT']};
   const initial=restored||{name:base.name,type:base.type,filter:base.filter||'',providers:clone(base.use||[]),members:clone(base.proxies||[]),advanced:Object.fromEntries(Object.entries(base).filter(([key])=>!['name','type','filter','use','proxies'].includes(key)))};
   const e=clone(initial),providers=Object.keys(nativeMap('proxy-providers'));
   const choices=(nativePolicyView().group_member_choices||[]).filter(c=>c.value!==name&&!c.blocked_for?.includes(name));
   const known=new Set(choices.map(c=>c.value));e.members.filter(m=>!known.has(m)).forEach(value=>choices.push({value,label:'原成员 · '+value,resource:'existing'}));
-  showDialog(role==='nodes'?(name?'编辑节点组':'添加节点组'):role==='rules'?'编辑未关联出口':'编辑共用出口',`<form id="native-group-form"><div class="fields"><label class="field">名称<input id="ng-name" value="${esc(e.name)}" ${name?'readonly':''} required></label><label class="field">选择方式<select id="ng-type">${!modes[e.type]?`<option value="${esc(e.type)}" selected>保留原生 ${esc(e.type)}</option>`:''}${Object.entries(modes).map(([key,label])=>`<option value="${key}" ${e.type===key?'selected':''}>${label}</option>`).join('')}</select></label></div><section class="native-member-section"><h3>订阅节点</h3><p class="preview-note">先在“订阅来源”添加订阅，再在这里勾选，用正则筛选香港、日本等线路。</p><div class="fields">${providers.map(p=>`<label class="check-row"><input type="checkbox" data-ng-source="${esc(p)}" ${e.providers.includes(p)?'checked':''}>${esc(p)}</label>`).join('')||'<p class="preview-note">还没有节点订阅，可先到左侧“订阅来源”添加。</p>'}</div><label class="field">包含正则<input id="ng-filter" value="${esc(e.filter)}" placeholder="例如：香港|HK"></label></section><section class="native-member-section"><div class="section-title"><h3>节点与子组成员</h3><button type="button" class="button" id="ng-add-node">添加手动节点</button></div><p class="preview-note">自建节点在节点库维护；应用出口在对应规则组内配置，可从成员旁的配置按钮打开。</p><label class="search">${icon('search')}<input id="ng-member-search" aria-label="搜索节点或子组" placeholder="搜索节点、子组或直连"></label><label class="check-row ng-advanced-references"><input type="checkbox" id="ng-show-rule-outlets">显示规则组出口（高级引用）</label><p id="ng-member-count" class="member-selection-summary" role="status"></p><div id="ng-member-choices" class="group-member-choices"></div><small class="preview-note">已选成员按上面的顺序导出，可用上下按钮调整。</small></section><details class="advanced-options native-member-section"><summary>测速、延迟容差及其他原生字段</summary><textarea id="ng-advanced" class="mono" rows="8" spellcheck="false">${esc(JSON.stringify(e.advanced,null,2))}</textarea></details><p id="ng-error" class="error-message" role="alert"></p><div class="native-member-footer"><button type="button" class="button" id="ng-cancel">${done?'返回上级节点组':'取消'}</button><button type="submit" class="button primary">保存节点组</button></div></form>`);
+  showDialog(role==='nodes'?(name?'编辑节点组':'添加节点组'):role==='rules'?'编辑未关联出口':'编辑共用出口',`<form id="native-group-form">${nodeGroupTemplateBar('data-ng-template')}<div class="fields"><label class="field">名称<input id="ng-name" value="${esc(e.name)}" ${name?'readonly':''} required></label><label class="field">选择方式<select id="ng-type">${!modes[e.type]?`<option value="${esc(e.type)}" selected>保留原生 ${esc(e.type)}</option>`:''}${Object.entries(modes).map(([key,label])=>`<option value="${key}" ${e.type===key?'selected':''}>${label}</option>`).join('')}</select></label></div><section class="native-member-section"><h3>订阅节点</h3><p class="preview-note">先在“订阅来源”添加订阅，再在这里勾选，用正则筛选香港、日本等线路。</p><div class="fields">${providers.map(p=>`<label class="check-row"><input type="checkbox" data-ng-source="${esc(p)}" ${e.providers.includes(p)?'checked':''}>${esc(p)}</label>`).join('')||'<p class="preview-note">还没有节点订阅，可先到左侧“订阅来源”添加。</p>'}</div><label class="field">包含正则<input id="ng-filter" value="${esc(e.filter)}" placeholder="例如：香港|HK"></label></section><section class="native-member-section"><div class="section-title"><h3>节点与子组成员</h3><button type="button" class="button" id="ng-add-node">添加手动节点</button></div><p class="preview-note">自建节点在节点库维护；应用出口在对应规则组内配置，可从成员旁的配置按钮打开。</p><label class="search">${icon('search')}<input id="ng-member-search" aria-label="搜索节点或子组" placeholder="搜索节点、子组或直连"></label><label class="check-row ng-advanced-references"><input type="checkbox" id="ng-show-rule-outlets">显示规则组出口（高级引用）</label><p id="ng-member-count" class="member-selection-summary" role="status"></p><div id="ng-member-choices" class="group-member-choices"></div><small class="preview-note">已选成员按上面的顺序导出，可用上下按钮调整。</small></section><details class="advanced-options native-member-section"><summary>测速、延迟容差及其他原生字段</summary><textarea id="ng-advanced" class="mono" rows="8" spellcheck="false">${esc(JSON.stringify(e.advanced,null,2))}</textarea></details><p id="ng-error" class="error-message" role="alert"></p><div class="native-member-footer"><button type="button" class="button" id="ng-cancel">${done?'返回上级节点组':'取消'}</button><button type="submit" class="button primary">保存节点组</button></div></form>`);
   markMemberDialog();
   setNativeEditorReturn(done);
   const paint=()=>{
@@ -39,6 +50,14 @@ nativeGroupEditor=function(name=null,role='nodes',restored=null,done=null){
   };
   const read=()=>{e.name=$('#ng-name').value.trim();e.type=$('#ng-type').value;e.filter=$('#ng-filter').value;const chosen=$$('[data-ng-source]:checked').map(el=>el.dataset.ngSource);e.providers=e.providers.filter(p=>chosen.includes(p)).concat(chosen.filter(p=>!e.providers.includes(p)));e.advanced=JSON.parse($('#ng-advanced').value);if(!e.advanced||Array.isArray(e.advanced)||typeof e.advanced!=='object')throw Error('高级字段需要 JSON 对象。');if(typeof applyInteractiveGroupFields==='function')applyInteractiveGroupFields(e);return e};
   if(typeof enhanceInteractiveGroup==='function')enhanceInteractiveGroup(e,read);
+  $$('[data-ng-template]').forEach(btn=>btn.onclick=()=>{
+    const tpl=NODE_GROUP_TEMPLATES[Number(btn.dataset.ngTemplate)];if(!tpl)return;
+    if(!name)$('#ng-name').value=tpl.name;
+    $('#ng-type').value=tpl.mode;
+    if($('#it-region')){$('#it-region').value=tpl.region;$('#ng-filter').value='';$('#it-region').dispatchEvent(new Event('change',{bubbles:true}))}
+    else{$('#ng-filter').value=tpl.include;$('#ng-filter').dispatchEvent(new Event('input',{bubbles:true}))}
+    toast(`已填入「${tpl.label}」模板，请勾选订阅或节点后保存。`);
+  });
   $('#ng-member-search').oninput=paint;$('#ng-show-rule-outlets').onchange=paint;paint();$('#ng-cancel').onclick=()=>$('#dialog').close();
   $('#ng-add-node').onclick=()=>{try{read();nativeNodeEditor(null,created=>{if(created&&!e.members.includes(created))e.members.push(created);nativeGroupEditor(name,role,e,done)})}catch(error){$('#ng-error').textContent=error.message}};
   $('#native-group-form').onsubmit=async event=>{

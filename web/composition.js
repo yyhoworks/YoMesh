@@ -70,7 +70,31 @@ renderGroupEditor=function(){
   $('#test-group').onclick=async()=>{try{if(dirty())await persist();draft=clone(find('groups',ident));adoptWorkspace(await api(`/api/groups/${encodeURIComponent(ident)}/test`,{}),{keepDraft:true});renderGroupEditor();toast('已开始通过节点测试 HTTP 延迟。')}catch(error){toast(error.message)}};
 };
 const createdGroup=addGroup;
-addGroup=function(){createdGroup();const handler=$('#resource-form').onsubmit;$('#resource-form').onsubmit=async e=>{const previous=new Set(data.groups.map(g=>g.id));await handler(e);const added=data.groups.find(g=>!previous.has(g.id));if(added&&!$('#dialog').open)editFlatGroup(added.id)}};
+addGroup=function(){
+  createdGroup();
+  let pendingInclude='';
+  if(typeof nodeGroupTemplateBar==='function'&&$('#resource-form')){
+    $('#resource-form').insertAdjacentHTML('afterbegin',nodeGroupTemplateBar('data-ag-template'));
+    $$('[data-ag-template]').forEach(btn=>btn.onclick=()=>{
+      const tpl=NODE_GROUP_TEMPLATES[Number(btn.dataset.agTemplate)];if(!tpl)return;
+      const nameInput=$('[name="name"]',$('#resource-form')),modeSelect=$('[name="mode"]',$('#resource-form'));
+      if(nameInput)nameInput.value=tpl.name;
+      if(modeSelect)modeSelect.value=tpl.mode;
+      pendingInclude=tpl.include||'';
+      toast(`已填入「${tpl.label}」模板，保存后可勾选订阅来源。`);
+    });
+  }
+  const handler=$('#resource-form').onsubmit;
+  $('#resource-form').onsubmit=async e=>{
+    const previous=new Set(data.groups.map(g=>g.id));
+    await handler(e);
+    const added=data.groups.find(g=>!previous.has(g.id));
+    if(added&&!$('#dialog').open){
+      if(pendingInclude){added.include=pendingInclude;try{await persist()}catch{}}
+      editFlatGroup(added.id);
+    }
+  };
+};
 function currentRuleImpacts(ident){return generationView().rule_impacts?.[ident]||[]}
 function shownRules(){return data.library.filter(r=>r.name.toLowerCase().includes(query.toLowerCase())&&(ruleSelectionFilter==='all'||ruleSelectionFilter==='on'&&selectedForGeneration('rules',r.id)||ruleSelectionFilter==='off'&&!selectedForGeneration('rules',r.id)||ruleSelectionFilter==='used'&&currentRuleImpacts(r.id).length))}
 renderLibrary=function(){

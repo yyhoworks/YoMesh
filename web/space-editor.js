@@ -13,36 +13,166 @@ function readFilePayload(file){
     reader.readAsDataURL(file);
   });
 }
-async function openConfigImport(){
+const MIHOMO_TEMPLATES={
+  standard:{
+    name:'Mihomo 标准分流方案',
+    desc:'包含港/台/日/新/美分组与常用分流规则模板，导入后可在界面自由配置订阅与规则',
+    yaml:`mixed-port: 17890
+allow-lan: true
+mode: rule
+log-level: info
+ipv6: true
+
+proxies:
+  - name: "示例节点-导入后请在订阅来源添加真实订阅"
+    type: trojan
+    server: example.com
+    port: 443
+    password: "password"
+    sni: example.com
+    udp: true
+
+proxy-groups:
+  - name: "🚀 默认代理"
+    type: select
+    proxies:
+      - "HK 香港节点"
+      - "TW 台湾节点"
+      - "JP 日本节点"
+      - "SG 新加坡节点"
+      - "US 美国节点"
+      - "DIRECT"
+  - name: "HK 香港节点"
+    type: url-test
+    proxies: ["示例节点-导入后请在订阅来源添加真实订阅"]
+    filter: "(?i)(港|HK|Hong\\\\s*Kong)"
+    interval: 300
+  - name: "TW 台湾节点"
+    type: url-test
+    proxies: ["示例节点-导入后请在订阅来源添加真实订阅"]
+    filter: "(?i)(台|TW|Taiwan)"
+    interval: 300
+  - name: "JP 日本节点"
+    type: url-test
+    proxies: ["示例节点-导入后请在订阅来源添加真实订阅"]
+    filter: "(?i)(日|JP|Japan)"
+    interval: 300
+  - name: "SG 新加坡节点"
+    type: url-test
+    proxies: ["示例节点-导入后请在订阅来源添加真实订阅"]
+    filter: "(?i)(新|SG|Singapore|狮城)"
+    interval: 300
+  - name: "US 美国节点"
+    type: url-test
+    proxies: ["示例节点-导入后请在订阅来源添加真实订阅"]
+    filter: "(?i)(美|US|United\\\\s*States|America)"
+    interval: 300
+
+rules:
+  - DOMAIN-SUFFIX,openai.com,US 美国节点
+  - DOMAIN-SUFFIX,anthropic.com,US 美国节点
+  - DOMAIN-SUFFIX,claude.ai,US 美国节点
+  - DOMAIN-SUFFIX,youtube.com,HK 香港节点
+  - DOMAIN-SUFFIX,googlevideo.com,HK 香港节点
+  - DOMAIN-SUFFIX,netflix.com,SG 新加坡节点
+  - DOMAIN-SUFFIX,t.me,SG 新加坡节点
+  - DOMAIN-SUFFIX,telegram.org,SG 新加坡节点
+  - DOMAIN-SUFFIX,github.com,🚀 默认代理
+  - DOMAIN-SUFFIX,githubusercontent.com,🚀 默认代理
+  - DOMAIN-SUFFIX,apple.com,DIRECT
+  - DOMAIN-SUFFIX,icloud.com,DIRECT
+  - DOMAIN-SUFFIX,cn,DIRECT
+  - DOMAIN-SUFFIX,baidu.com,DIRECT
+  - DOMAIN-SUFFIX,qq.com,DIRECT
+  - DOMAIN-SUFFIX,bilibili.com,DIRECT
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - MATCH,🚀 默认代理`
+  },
+  minimal:{
+    name:'Mihomo 极简分流方案',
+    desc:'包含默认代理组与基础直连分流模板，适合轻量自定义',
+    yaml:`mixed-port: 17890
+allow-lan: true
+mode: rule
+log-level: info
+
+proxies:
+  - name: "示例节点-导入后请在订阅来源添加真实订阅"
+    type: trojan
+    server: example.com
+    port: 443
+    password: "password"
+    sni: example.com
+    udp: true
+
+proxy-groups:
+  - name: "🚀 默认代理"
+    type: select
+    proxies:
+      - "示例节点-导入后请在订阅来源添加真实订阅"
+      - "DIRECT"
+
+rules:
+  - DOMAIN-SUFFIX,cn,DIRECT
+  - DOMAIN-SUFFIX,baidu.com,DIRECT
+  - DOMAIN-SUFFIX,qq.com,DIRECT
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - MATCH,🚀 默认代理`
+  }
+};
+async function openConfigImport(initialTemplate=''){
   try{await saveSpaceDrafts();await refreshSpaceCatalog()}catch(error){toast(error.message);return}
-  showDialog('导入现有配置',`<form id="config-import-form">
-    <p class="scope-editor-note">${badge('独立新方案','accent')} 支持直接导入 Mihomo (.yaml)、sing-box (.json)、YoMesh (.json) 或 .zip 配置包，并可选附带 LocalDNS 配置自动对齐端口与上游接线。</p>
-    <div class="fields">
-      <label class="field">方案名称<input id="ci-name" required maxlength="80" placeholder="例如：家庭网关 / LocalDNS 代理" value="导入配置"></label>
-      <label class="field">说明（可选）<input id="ci-description" maxlength="500" placeholder="例如：从现有 Mihomo / sing-box 导入"></label>
+  showDialog(initialTemplate?'从 Mihomo 模板创建方案':'导入 Mihomo 配置 / 选择模板',`<form id="config-import-form">
+    <p class="scope-editor-note">${badge('独立新方案','accent')} 支持直接上传或粘贴 Mihomo (<code>.yaml</code>) 配置、配置包 (<code>.zip</code>)，也可点击下方模板填入后自行调整再导入。</p>
+    <div class="preset-pill-box">
+      <div class="preset-pill-header"><span>📦 载入 Mihomo 配置模板（点击填入下方编辑框，可自由修改后再导入）：</span></div>
+      <div class="preset-pill-list">
+        <button type="button" class="preset-pill" data-ci-tpl="standard">📄 标准地区分流模板（港/台/日/新/美 + 常用规则）</button>
+        <button type="button" class="preset-pill" data-ci-tpl="minimal">🪶 极简轻量模板（默认代理 + 国内直连）</button>
+      </div>
     </div>
-    <label class="field">选择代理配置文件（.yaml / .yml / .json / .zip）<input id="ci-file" type="file" accept=".yaml,.yml,.json,.zip"></label>
-    <label class="field">或者直接粘贴配置内容（YAML / JSON）<textarea id="ci-text" class="mono" rows="6" spellcheck="false" placeholder="粘贴 Mihomo config.yaml 或 sing-box config.json 内容…"></textarea></label>
-    <details class="advanced-options" open>
-      <summary>LocalDNS 联动与导入方式</summary>
-      <label class="field" style="margin-top:10px">附加 LocalDNS 配置（可选，支持 localdns.json 或 LocalDNS .zip 配置包）<input id="ci-localdns-file" type="file" accept=".json,.zip"><small>上传后会自动提取 LocalDNS 监听端口与代理接线（mixed_port / dns_port / socks5）。</small></label>
-      <label class="field">空间类型<select id="ci-mode">
-        <option value="auto">自动识别（推荐：可同时输出 Mihomo 与 sing-box；含复杂 provider 时自动保留原生）</option>
-        <option value="portable">通用配置空间（可一键切换导出 Mihomo YAML 与 sing-box JSON）</option>
-        <option value="native">Mihomo 原生空间（100% 保留 proxy-providers / rule-providers 与 LocalDNS 目录）</option>
+    <div class="fields">
+      <label class="field">方案名称<input id="ci-name" required maxlength="80" placeholder="例如：主力 Mihomo 方案" value="导入 Mihomo 配置"></label>
+      <label class="field">说明（可选）<input id="ci-description" maxlength="500" placeholder="例如：从 Mihomo YAML 导入或基于模板创建"></label>
+    </div>
+    <label class="field">选择 Mihomo 配置文件（.yaml / .yml / .zip / .json）<input id="ci-file" type="file" accept=".yaml,.yml,.json,.zip"></label>
+    <label class="field">或者直接粘贴 / 编辑 Mihomo 配置内容（YAML）<textarea id="ci-text" class="mono" rows="8" spellcheck="false" placeholder="粘贴 Mihomo config.yaml 内容，或点击上方「📦 载入 Mihomo 配置模板」…"></textarea></label>
+    <details class="advanced-options">
+      <summary>高级导入选项（模式与 LocalDNS 附加）</summary>
+      <label class="field" style="margin-top:10px">空间类型<select id="ci-mode">
+        <option value="auto">自动识别（推荐：标准 Mihomo 配置可自由编辑节点组与规则）</option>
+        <option value="native">Mihomo 原生空间（100% 原样保留 proxy-providers / rule-providers）</option>
+        <option value="portable">通用标准空间（支持同时导出 Mihomo YAML 与 sing-box JSON）</option>
       </select></label>
-      <label class="check-row"><input type="checkbox" id="ci-draft" checked>允许先导入为草稿（若原配置引用了本地缺失文件，可在导入后补充再校验）</label>
+      <label class="field">附加 LocalDNS 配置（可选，支持 localdns.json 或 .zip）<input id="ci-localdns-file" type="file" accept=".json,.zip"></label>
+      <label class="check-row"><input type="checkbox" id="ci-draft" checked>允许先导入为草稿（后续可在界面继续补充订阅和节点）</label>
     </details>
     <p id="ci-error" class="error-message" role="alert"></p>
     <div class="dialog-actions">
       <button type="button" class="button" id="ci-cancel">取消</button>
-      <button type="submit" class="button primary" id="ci-submit">读取并创建方案</button>
+      <button type="submit" class="button primary" id="ci-submit">导入并创建方案</button>
     </div>
   </form>`);
+  const applyTpl=key=>{
+    const tpl=MIHOMO_TEMPLATES[key];
+    if(!tpl)return;
+    $('#ci-name').value=tpl.name;
+    $('#ci-description').value=tpl.desc;
+    $('#ci-text').value=tpl.yaml;
+    $('#ci-file').value='';
+  };
+  $$('[data-ci-tpl]').forEach(btn=>btn.onclick=()=>{
+    applyTpl(btn.dataset.ciTpl);
+    toast('已填入 Mihomo 模板，可直接点击右下角「导入并创建方案」或先修改内容。');
+  });
+  if(initialTemplate)applyTpl(initialTemplate);
   $('#ci-file').onchange=e=>{
     const f=e.target.files?.[0];
-    if(f&&($('#ci-name').value==='导入配置'||!$('#ci-name').value.trim())){
-      $('#ci-name').value=f.name.replace(/\.(yaml|yml|json|zip)$/i,'')||'导入配置';
+    if(f&&($('#ci-name').value==='导入 Mihomo 配置'||!$('#ci-name').value.trim())){
+      $('#ci-name').value=f.name.replace(/\.(yaml|yml|json|zip)$/i,'')||'导入 Mihomo 配置';
     }
   };
   $('#ci-cancel').onclick=()=>$('#dialog').close();
@@ -51,11 +181,18 @@ async function openConfigImport(){
     const btn=$('#ci-submit');btn.disabled=true;$('#ci-error').textContent='';
     try{
       const file=$('#ci-file').files?.[0],text=$('#ci-text').value.trim(),dnsFile=$('#ci-localdns-file').files?.[0];
-      if(!file&&!text)throw Error('请选择代理配置文件，或直接粘贴配置内容。');
+      if(!file&&!text)throw Error('请选择 Mihomo 配置文件、粘贴 YAML 内容，或点击上方模板按钮载入模板。');
       if(file&&file.size>20*1024*1024)throw Error('配置文件不能超过 20 MiB。');
       if(dnsFile&&dnsFile.size>20*1024*1024)throw Error('LocalDNS 配置文件不能超过 20 MiB。');
+      let chosenName=$('#ci-name').value.trim()||'导入 Mihomo 配置';
+      const existingNames=new Set((spaceCatalog?.spaces||[]).map(s=>s.name));
+      if(existingNames.has(chosenName)){
+        let n=2;
+        while(existingNames.has(`${chosenName} (${n})`))n++;
+        chosenName=`${chosenName} (${n})`;
+      }
       const payload={
-        name:$('#ci-name').value.trim()||'导入配置',
+        name:chosenName,
         description:$('#ci-description').value.trim(),
         mode:$('#ci-mode').value,
         draft:$('#ci-draft').checked,
@@ -66,7 +203,7 @@ async function openConfigImport(){
         if(/\.zip$/i.test(file.name))payload.content_base64=await readFilePayload(file);
         else payload.content=await file.text();
       }else{
-        payload.filename='pasted-config';
+        payload.filename='pasted-config.yaml';
         payload.content=text;
       }
       if(dnsFile){
@@ -192,77 +329,6 @@ function openClientControllerModal(targetSpaceId){
     }
   };
 }
-async function openQuickCreateSpace(){
-  try{await saveSpaceDrafts();await refreshSpaceCatalog()}catch(error){toast(error.message);return}
-  const regions=spacePresetsCache.regions||DEFAULT_PRESET_REGIONS;
-  const rules=spacePresetsCache.rules||DEFAULT_PRESET_RULES;
-  showDialog('⚡ 快速创建方案（填订阅一键成套）',`<form id="quick-create-form">
-    <p class="scope-editor-note">${badge('47 步缩减至 3 步','accent')} 粘贴机场订阅链接，一键自动生成「港/台/日/新/美」测速节点组、8 大常用分流规则与持久订阅链接。</p>
-    <section class="space-form-section" style="margin-bottom:12px">
-      <h3>① 方案名称与机场节点订阅</h3>
-      <div class="fields">
-        <label class="field">方案名称<input id="qc-name" required maxlength="80" value="主力全套分流方案" placeholder="例如：主力全套分流方案"></label>
-        <label class="field">输出内核格式<select id="qc-proxy">
-          <option value="mihomo">Mihomo · YAML（Clash.Meta / OpenWrt / Clash Party）</option>
-          <option value="sing-box">sing-box · JSON</option>
-        </select></label>
-      </div>
-      <label class="field" style="margin-top:8px">机场节点订阅地址（URL，支持粘贴多个，每行一条；也可留空先建框架）<textarea id="qc-urls" class="mono" rows="2" spellcheck="false" placeholder="https://example.com/api/v1/client/subscribe?token=..."></textarea></label>
-    </section>
-    <section class="space-form-section" style="margin-bottom:12px">
-      <div class="section-title"><h3>② 自动生成的节点分组（默认全选，按正则自动归类节点并测速）</h3></div>
-      <div class="preset-pill-grid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
-        <label class="check-row preset-pill"><input type="checkbox" checked disabled>🚀 默认代理（汇总选择组）</label>
-        ${regions.map(r=>`<label class="check-row preset-pill"><input type="checkbox" data-qc-region="${esc(r.key)}" checked>${esc(r.badge||r.name)}</label>`).join('')}
-      </div>
-    </section>
-    <section class="space-form-section" style="margin-bottom:12px">
-      <div class="section-title"><h3>③ 自动生成的分流规则包（默认全选，自动绑定对应地区组与直连/拦截）</h3></div>
-      <div class="preset-pill-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin-top:8px">
-        ${rules.map(r=>`<label class="check-row preset-pill"><input type="checkbox" data-qc-rule="${esc(r.key)}" checked>${esc(r.desc||r.name)}</label>`).join('')}
-      </div>
-    </section>
-    <p id="qc-error" class="error-message" role="alert"></p>
-    <div class="dialog-actions">
-      <button type="button" class="button" id="qc-cancel">取消</button>
-      <button type="submit" class="button primary" id="qc-submit">⚡ 一键生成方案并复制订阅链接</button>
-    </div>
-  </form>`);
-  $('#qc-cancel').onclick=()=>$('#dialog').close();
-  $('#quick-create-form').onsubmit=async e=>{
-    e.preventDefault();
-    const btn=$('#qc-submit');btn.disabled=true;btn.textContent='正在拉取订阅并构建方案…';$('#qc-error').textContent='';
-    try{
-      const chosenRegions=$$('[data-qc-region]:checked').map(el=>el.dataset.qcRegion);
-      const chosenRules=$$('[data-qc-rule]:checked').map(el=>el.dataset.qcRule);
-      const res=await api('/api/spaces/quick-create',{
-        name:$('#qc-name').value.trim()||'主力全套分流方案',
-        proxy:$('#qc-proxy').value,
-        subscription_url:$('#qc-urls').value.trim(),
-        subscription_name:'主力机场订阅',
-        regions:chosenRegions,
-        rules:chosenRules,
-        base_url:location.origin
-      });
-      spaceCatalog=res.spaces;
-      if(res.subscription?.url){
-        spacePresetsCache.links_by_space??={};
-        spacePresetsCache.links_by_space[res.id]=[res.subscription];
-        await copyTextSafe(res.subscription.url,'');
-      }
-      $('#dialog').close();
-      await switchSpace(res.id);
-      await refreshSpacePresets();
-      if(page==='spaces')paintSpaceCards();
-      const s=res.summary||{};
-      toast(`⚡ 已生成方案（${s.nodes||0} 节点 / ${s.groups||0} 分组 / ${s.policies||0} 规则）${res.subscription?.url?'，持久订阅链接已自动复制！':''}`);
-    }catch(error){
-      $('#qc-error').textContent=error.message;
-      btn.disabled=false;
-      btn.textContent='⚡ 一键生成方案并复制订阅链接';
-    }
-  };
-}
 let hermesFreshToken=null;
 async function renderHermesPage(){
   $('#content').innerHTML='<div class="panel"><p class="preview-note">正在读取 Hermes 接入状态…</p></div>';
@@ -360,19 +426,20 @@ function paintSpaceCards(){
     refreshSpacePresets().then(()=>{if(page==='spaces')paintSpaceCards()});
   }
   const entries=spaceCatalog?.spaces||[];
-  $('#content').innerHTML=`<div class="configuration-overview"><div><h2>代理配置与一键成套向导</h2><p>填一条机场订阅即可 3 步自动生成「港/台/日/新/美」分组与 8 大分流规则；也可直接导入现有 Mihomo YAML / sing-box JSON 配置。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button primary" id="space-quick-create">⚡ 快速创建方案（填订阅一键成套）</button><button type="button" class="button" id="space-import-config">导入现有配置</button><button type="button" class="button" id="space-open-subscription">高级订阅链接设置</button></div></div><div><h2>Hermes 智能助手 & HTTP MCP</h2><p>一行命令配好 Hermes 或直连 <code>/mcp</code> 接口，用自然语言查分流、一句话置顶加规则并自动热重载客户端。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button" id="space-open-hermes">配置 Hermes / MCP 接入</button></div></div></div><div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{
+  $('#content').innerHTML=`<div class="configuration-overview"><div><h2>Mihomo 配置导入、模板与导出</h2><p>支持直接导入现有 Mihomo YAML 配置，或选用内置 Mihomo 模板新建配置空间后按需配置订阅、分组与规则；随时一键导出 <code>mihomo.yaml</code> 或复制持久订阅链接。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button primary" id="space-import-config">📥 导入 Mihomo 配置</button><button type="button" class="button" id="space-template-create">📦 从 Mihomo 模板新建</button><button type="button" class="button" id="space-export-current">📤 导出当前 Mihomo 配置</button><button type="button" class="button" id="space-open-subscription">高级订阅链接设置</button></div></div><div><h2>Hermes 智能助手 & HTTP MCP</h2><p>一行命令配好 Hermes 或直连 <code>/mcp</code> 接口，用自然语言查分流、一句话置顶加规则并自动热重载客户端。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button" id="space-open-hermes">配置 Hermes / MCP 接入</button></div></div></div><div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{
     const current=s.id===spaceId,counts=s.counts||{},g=s.generation||{},issues=g.excluded_policies?.length||0;
     const savedLink=(spacePresetsCache.links_by_space?.[s.id]||[]).at(-1);
     const linkPreview=savedLink?.url||`${location.origin}/s/<点击右侧按钮一键生成并复制>/${s.proxy==='sing-box'&&!s.native?'sing-box.json':'mihomo.yaml'}`;
     const ctrl=spacePresetsCache.controllers?.[s.id];
     const ctrlConnected=ctrl?.enabled&&ctrl?.url;
     const actions=current
-      ?`<button class="button primary" data-space-configure="${esc(s.id)}">去配置规则</button><button class="button" data-space-export="${esc(s.id)}">${actionIcon('download')}导出配置包</button><button class="button" data-space-subscription="${esc(s.id)}">链接高级设置</button>${resourceMenu(s.name,`<button data-space-edit="${esc(s.id)}">${s.native?'修改名称与说明':'编辑方案选用'}</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" disabled>${s.id==='default'?'默认方案保留':'切换后可删除'}</button>`)}`
-      :`<button class="button primary" data-space-use="${esc(s.id)}">切换到此方案</button><button class="button" data-space-edit="${esc(s.id)}">${s.native?'改名 / 说明':'编辑选用'}</button><button class="button" data-space-copy="${esc(s.id)}">复制为新方案</button>${resourceMenu(s.name,`<button data-space-subscription="${esc(s.id)}">切换并查看订阅链接</button><button data-space-export="${esc(s.id)}">切换并导出代理</button><button class="danger-action" data-space-delete="${esc(s.id)}" ${s.id==='default'?'disabled':''}>${s.id==='default'?'默认方案保留':'删除此方案'}</button>`)}`;
+      ?`<button class="button primary" data-space-configure="${esc(s.id)}">去配置规则</button><button class="button" data-space-export="${esc(s.id)}">${actionIcon('download')}导出 Mihomo 配置</button><button class="button" data-space-subscription="${esc(s.id)}">链接高级设置</button>${resourceMenu(s.name,`<button data-space-edit="${esc(s.id)}">${s.native?'修改名称与说明':'编辑方案选用'}</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" disabled>${s.id==='default'?'默认方案保留':'切换后可删除'}</button>`)}`
+      :`<button class="button primary" data-space-use="${esc(s.id)}">切换到此方案</button><button class="button" data-space-edit="${esc(s.id)}">${s.native?'改名 / 说明':'编辑选用'}</button><button class="button" data-space-copy="${esc(s.id)}">复制为新方案</button>${resourceMenu(s.name,`<button data-space-subscription="${esc(s.id)}">切换并查看订阅链接</button><button data-space-export="${esc(s.id)}">切换并导出 Mihomo 配置</button><button class="danger-action" data-space-delete="${esc(s.id)}" ${s.id==='default'?'disabled':''}>${s.id==='default'?'默认方案保留':'删除此方案'}</button>`)}`;
     return `<article class="panel space-card ${current?'selected':''}" aria-label="${esc(s.name)}配置空间"><div class="space-card-heading"><div><h2>${esc(s.name)}</h2><p>${s.native?'Mihomo YAML':s.proxy==='sing-box'?'sing-box JSON':'Mihomo YAML'} · ${s.native?'原生引用与缓存':{inline:'内联规则',local:'本地文件引用',remote:'远程订阅引用'}[s.rule_output]||'内联规则'}</p></div>${current?badge('当前使用中','accent'):badge('未激活')}</div><p class="space-description">${esc(s.description||'节点组 + 规则 + 分流策略的生成方案')}</p><div class="space-counts"><span><b>${counts.groups||0}</b> 节点组</span><span><b>${counts.library||0}</b> 规则</span><span><b>${counts.policies||0}</b> 策略</span></div><div class="space-inline-sub-box"><div class="space-inline-sub-label"><span>🔗 专属持久订阅链接（填入客户端 / LocalDNS 自动拉取更新）</span></div><div class="space-inline-sub-row"><input type="text" class="mono" readonly value="${esc(linkPreview)}" aria-label="${esc(s.name)}订阅链接"><button type="button" class="button primary" data-space-copy-sub="${esc(s.id)}">📋 直接复制</button></div></div><div class="space-inline-ctrl-bar"><div class="space-inline-ctrl-info"><span>🔄 客户端自动重载：</span>${ctrlConnected?`<strong style="color:#34d399">● 已绑定 (${esc(ctrl.url)}) · 改规则 0 秒热重载</strong>`:`<span>未绑定（可选填 Mihomo Controller，改规则自动热重载）</span>`}</div><div class="filter-row" style="gap:8px">${ctrlConnected?`<button type="button" class="text-button" data-space-reload-now="${esc(s.id)}">立即重载</button>`:''}<button type="button" class="text-button" data-space-controller="${esc(s.id)}">${ctrlConnected?'修改控制器':'绑定客户端控制器'}</button></div></div><p class="space-readiness ${g.error?'error-message':'generation-ready'}">${g.error?esc(g.error):g.valid?'代理选用检查通过':'等待代理检查'}${issues?` · 跳过 ${issues} 条策略`:''}</p><div class="space-card-actions">${actions}</div></article>`;
   }).join('')}</div><p class="preview-note">“当前使用中”表示左侧导航正在编辑该方案。切换方案或导出前都会自动执行原生内核校验。</p>`;
-  $('#space-quick-create').onclick=openQuickCreateSpace;
-  $('#space-import-config').onclick=openConfigImport;
+  $('#space-import-config').onclick=()=>openConfigImport();
+  $('#space-template-create').onclick=()=>openConfigImport('standard');
+  $('#space-export-current').onclick=()=>openConfigurationExport('proxy');
   $('#space-open-subscription').onclick=openSubscriptionLink;
   $('#space-open-hermes').onclick=openHermesIntegration;
   $$('[data-space-copy-sub]').forEach(b=>b.onclick=()=>copySpaceSubscriptionDirect(b.dataset.spaceCopySub));
