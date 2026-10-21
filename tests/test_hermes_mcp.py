@@ -194,7 +194,61 @@ class HermesMcpTests(unittest.TestCase):
         self.assertEqual(payload["target_name"], "US 美国节点")
         self.assertEqual(len(payload["entries"]), 2)
 
+    def test_client_and_server_templates_import_and_exclude_personal_rules(self) -> None:
+        js_path = Path(__file__).resolve().parents[1] / "web" / "space-editor.js"
+        js_text = js_path.read_text(encoding="utf-8")
+
+        # Verify Hermes block is removed from paintSpaceCards
+        paint_section = js_text.split("function paintSpaceCards()", 1)[1].split("async function editSpace", 1)[0]
+        self.assertNotIn("Hermes 智能助手 & HTTP MCP", paint_section)
+        self.assertIn("space-template-client", paint_section)
+        self.assertIn("space-template-server", paint_section)
+
+        # Extract client and server template YAML from MIHOMO_TEMPLATES
+        import re
+        matches = dict(re.findall(r"(client|server):\{\s*name:'[^']+',\s*desc:'[^']+',\s*yaml:`([^`]+)`", js_text))
+        self.assertEqual(set(matches.keys()), {"client", "server"})
+
+        forbidden_markers = [
+            "PT-Tracker",
+            "PT-Domain",
+            "Custom-Direct",
+            "Custom-Proxy",
+            "BackHome",
+            "NoQUIC",
+            "yyho",
+            "19302",
+            "5349",
+            "3478",
+            "Dmit",
+            "华为云",
+            "甲骨云",
+            "backhome-",
+        ]
+        for key, raw_yaml in matches.items():
+            yaml_text = raw_yaml.replace("\\\\b", "\\b")
+            for marker in forbidden_markers:
+                self.assertNotIn(marker, yaml_text, f"{key} template still contains {marker}")
+
+            _, cat = self.api("/api/spaces")
+            status, imported = self.api(
+                "/api/spaces/import-config",
+                {
+                    "name": f"模板测试-{key}",
+                    "filename": f"{key}.yaml",
+                    "text": yaml_text,
+                    "mode": "auto",
+                    "allow_draft": True,
+                    "revision": cat["revision"],
+                },
+            )
+            self.assertEqual(status, 200, imported)
+            self.assertEqual(imported["import_summary"]["mode"], "native")
+            space_entry = next(s for s in imported["spaces"] if s["id"] == imported["id"])
+            self.assertTrue(space_entry["native"])
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

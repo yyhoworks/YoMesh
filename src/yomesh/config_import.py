@@ -234,9 +234,15 @@ def _build_mihomo_native(config: dict, raw_yaml: str, extra_files: dict[str, byt
             mihomo.pop(key, None)
 
     for section in ("proxy-providers", "rule-providers"):
-        for provider in mihomo.get(section, {}).values():
-            if isinstance(provider, dict) and isinstance(provider.get("path"), str) and provider["path"].strip():
+        prefix = "providers" if section == "proxy-providers" else "ruleset"
+        for pname, provider in mihomo.get(section, {}).items():
+            if not isinstance(provider, dict):
+                continue
+            if isinstance(provider.get("path"), str) and provider["path"].strip():
                 provider["path"] = _normalize_mihomo_path(provider["path"])
+            elif provider.get("type") == "http":
+                safe_seg = re.sub(r"[^A-Za-z0-9._@-]+", "_", str(pname)).strip("._") or "provider"
+                provider["path"] = f"{prefix}/{safe_seg}.yaml"
     for listener in mihomo.get("listeners", []):
         if not isinstance(listener, dict):
             continue
@@ -259,6 +265,25 @@ def _build_mihomo_native(config: dict, raw_yaml: str, extra_files: dict[str, byt
                 documents[norm] = body.decode("utf-8-sig")
             except UnicodeError:
                 assets[norm] = base64.b64encode(body).decode("ascii")
+
+    for pname, provider in mihomo.get("proxy-providers", {}).items():
+        if not isinstance(provider, dict) or provider.get("type") != "http":
+            continue
+        clean_path = str(provider.get("path") or "").removeprefix("./")
+        if clean_path and clean_path not in documents and clean_path not in assets and not clean_path.lower().endswith((".mrs", ".srs")):
+            documents[clean_path] = "proxies: []\n"
+    for rname, provider in mihomo.get("rule-providers", {}).items():
+        if not isinstance(provider, dict) or provider.get("type") != "http":
+            continue
+        clean_path = str(provider.get("path") or "").removeprefix("./")
+        if clean_path and clean_path not in documents and clean_path not in assets and not clean_path.lower().endswith((".mrs", ".srs")):
+            behavior = str(provider.get("behavior") or "domain").lower()
+            if behavior == "ipcidr":
+                documents[clean_path] = "payload:\n  - '127.0.0.1/32'\n"
+            elif behavior == "classical":
+                documents[clean_path] = "payload:\n  - 'DOMAIN-SUFFIX,example.invalid'\n"
+            else:
+                documents[clean_path] = "payload:\n  - '+.example.invalid'\n"
 
     has_dns = "localdns/config/localdns.json" in documents
     native = {

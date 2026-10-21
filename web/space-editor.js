@@ -14,124 +14,1167 @@ function readFilePayload(file){
   });
 }
 const MIHOMO_TEMPLATES={
-  standard:{
-    name:'Mihomo 标准分流方案',
-    desc:'包含港/台/日/新/美分组与常用分流规则模板，导入后可在界面自由配置订阅与规则',
-    yaml:`mixed-port: 17890
+  client:{
+    name:'Mihomo 客户端版本方案',
+    desc:'基于客户端配置模板（含 TUN / Fake-IP / 地区自动测速组 / 完整国内外应用分流，已移除 PT 与个人自定义规则）',
+    yaml:`port: 7890
+socks-port: 7891
+mixed-port: 7892
+redir-port: 7893
+tproxy-port: 7894
 allow-lan: true
-mode: rule
+bind-address: "*"
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
 log-level: info
-ipv6: true
+find-process-mode: always
+global-client-fingerprint: chrome
+keep-alive-idle: 600
+keep-alive-interval: 30
 
-proxies:
-  - name: "示例节点-导入后请在订阅来源添加真实订阅"
-    type: trojan
-    server: example.com
-    port: 443
-    password: "password"
-    sni: example.com
-    udp: true
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+tun:
+  enable: true
+  stack: mixed
+  dns-hijack:
+    - any:53
+    - tcp://any:53
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  force-dns-mapping: true
+  override-destination: false
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  skip-domain:
+    - "+.push.apple.com"
+    - "+.Mijia Cloud"
+
+hosts:
+  time.android.com: 203.107.6.88
+  time.facebook.com: 203.107.6.88
+
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  respect-rules: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter-mode: blacklist
+  fake-ip-filter:
+    - "*.lan"
+    - "*.localdomain"
+    - "*.example"
+    - "*.invalid"
+    - "*.localhost"
+    - "*.test"
+    - "*.local"
+    - "*.home.arpa"
+    - "time.*.com"
+    - "time.*.gov"
+    - "time.*.edu.cn"
+    - "time.*.apple.com"
+    - "time-ios.apple.com"
+    - "time1.*.com"
+    - "time2.*.com"
+    - "time3.*.com"
+    - "time4.*.com"
+    - "time5.*.com"
+    - "time6.*.com"
+    - "time7.*.com"
+    - "ntp.*.com"
+    - "ntp1.*.com"
+    - "ntp2.*.com"
+    - "ntp3.*.com"
+    - "ntp4.*.com"
+    - "ntp5.*.com"
+    - "ntp6.*.com"
+    - "ntp7.*.com"
+    - "*.time.edu.cn"
+    - "*.ntp.org.cn"
+    - "+.pool.ntp.org"
+    - "time1.cloud.tencent.com"
+    - "music.163.com"
+    - "*.music.163.com"
+    - "*.126.net"
+    - "musicapi.taihe.com"
+    - "music.taihe.com"
+    - "songsearch.kugou.com"
+    - "trackercdn.kugou.com"
+    - "*.kuwo.cn"
+    - "api-jooxtt.sanook.com"
+    - "api.joox.com"
+    - "joox.com"
+    - "y.qq.com"
+    - "*.y.qq.com"
+    - "streamoc.music.tc.qq.com"
+    - "mobileoc.music.tc.qq.com"
+    - "isure.stream.qqmusic.qq.com"
+    - "dl.stream.qqmusic.qq.com"
+    - "aqqmusic.tc.qq.com"
+    - "amobile.music.tc.qq.com"
+    - "*.xiami.com"
+    - "*.music.migu.cn"
+    - "music.migu.cn"
+    - "+.msftconnecttest.com"
+    - "+.msftncsi.com"
+    - "localhost.ptlogin2.qq.com"
+    - "localhost.sec.qq.com"
+    - "+.qq.com"
+    - "+.tencent.com"
+    - "+.srv.nintendo.net"
+    - "*.n.n.srv.nintendo.net"
+    - "+.cdn.nintendo.net"
+    - "+.stun.playstation.net"
+    - "xbox.*.*.microsoft.com"
+    - "*.*.xboxlive.com"
+    - "xbox.*.microsoft.com"
+    - "xnotify.xboxlive.com"
+    - "+.battlenet.com.cn"
+    - "+.wotgame.cn"
+    - "+.wggames.cn"
+    - "+.wowsgame.cn"
+    - "+.wargaming.net"
+    - "proxy.golang.org"
+    - "stun.*.*"
+    - "stun.*.*.*"
+    - "+.stun.*.*"
+    - "+.stun.*.*.*"
+    - "+.stun.*.*.*.*"
+    - "+.stun.*.*.*.*.*"
+    - "heartbeat.belkin.com"
+    - "*.linksys.com"
+    - "*.linksyssmartwifi.com"
+    - "*.router.asus.com"
+    - "mesu.apple.com"
+    - "swscan.apple.com"
+    - "swquery.apple.com"
+    - "swdownload.apple.com"
+    - "swcdn.apple.com"
+    - "swdist.apple.com"
+    - "lens.l.google.com"
+    - "stun.l.google.com"
+    - "na.b.g-tun.com"
+    - "+.nflxvideo.net"
+    - "*.square-enix.com"
+    - "*.finalfantasyxiv.com"
+    - "*.ffxiv.com"
+    - "*.ff14.sdo.com"
+    - "ff.dorado.sdo.com"
+    - "*.mcdn.bilivideo.cn"
+    - "+.media.dssott.com"
+    - "shark007.net"
+    - "Mijia Cloud"
+    - "+.cmbchina.com"
+    - "+.cmbimg.com"
+    - "local.adguard.org"
+    - "+.sandai.net"
+    - "+.n0808.com"
+    - "+.uu.163.com"
+    - "ps.res.netease.com"
+    - "+.115.com"
+    - "+.115cdn.com"
+    - "+.115cdn.net"
+    - "+.anxia.com"
+    - "+.3322.org"
+    - "+.ddns.net"
+    - "+.dyndns.org"
+    - "+.no-ip.com"
+    - "+.oray.com"
+    - "+.pubyun.com"
+    - "+.synology.me"
+    - "+.quickconnect.cn"
+    - "+.quickconnect.to"
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  proxy-server-nameserver:
+    - https://223.5.5.5/dns-query
+    - https://120.53.53.53/dns-query
+  direct-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+
+proxy-providers:
+  机场订阅:
+    type: http
+    url: "https://example.com/your-subscription-url"
+    path: ./proxy_providers/机场订阅.yaml
+    interval: 3600
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 300
+
+proxies: []
 
 proxy-groups:
-  - name: "🚀 默认代理"
+  - name: "🇺🇸 美国节点"
+    type: url-test
+    use:
+      - 机场订阅
+    filter: '(?i)(?:美国|US|United States|\\bUS\\b)'
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    lazy: true
+    tolerance: 50
+    timeout: 2000
+    max-failed-times: 3
+  - name: "🇭🇰 香港节点"
+    type: url-test
+    use:
+      - 机场订阅
+    filter: '(?i)(?:香港|HK|Hong Kong|\\bHK\\b)'
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    lazy: true
+    tolerance: 50
+    timeout: 2000
+    max-failed-times: 3
+  - name: "🇹🇼 台湾节点"
+    type: url-test
+    use:
+      - 机场订阅
+    filter: '(?i)(?:台湾|TW|Taiwan|\\bTW\\b)'
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    lazy: true
+    tolerance: 50
+    timeout: 2000
+    max-failed-times: 3
+  - name: "🇯🇵 日本节点"
+    type: url-test
+    use:
+      - 机场订阅
+    filter: '(?i)(?:日本|JP|Japan|\\bJP\\b)'
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    lazy: true
+    tolerance: 50
+    timeout: 2000
+    max-failed-times: 3
+  - name: "🇸🇬 新加坡节点"
+    type: url-test
+    use:
+      - 机场订阅
+    filter: '(?i)(?:新加坡|狮城|SG|Singapore|\\bSG\\b)'
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    lazy: true
+    tolerance: 50
+    timeout: 2000
+    max-failed-times: 3
+  - name: "☁️ 全部"
+    type: select
+    use:
+      - 机场订阅
+  - name: "🎯 全球直连"
     type: select
     proxies:
-      - "HK 香港节点"
-      - "TW 台湾节点"
-      - "JP 日本节点"
-      - "SG 新加坡节点"
-      - "US 美国节点"
-      - "DIRECT"
-  - name: "HK 香港节点"
-    type: url-test
-    proxies: ["示例节点-导入后请在订阅来源添加真实订阅"]
-    filter: "(?i)(港|HK|Hong\\\\s*Kong)"
-    interval: 300
-  - name: "TW 台湾节点"
-    type: url-test
-    proxies: ["示例节点-导入后请在订阅来源添加真实订阅"]
-    filter: "(?i)(台|TW|Taiwan)"
-    interval: 300
-  - name: "JP 日本节点"
-    type: url-test
-    proxies: ["示例节点-导入后请在订阅来源添加真实订阅"]
-    filter: "(?i)(日|JP|Japan)"
-    interval: 300
-  - name: "SG 新加坡节点"
-    type: url-test
-    proxies: ["示例节点-导入后请在订阅来源添加真实订阅"]
-    filter: "(?i)(新|SG|Singapore|狮城)"
-    interval: 300
-  - name: "US 美国节点"
-    type: url-test
-    proxies: ["示例节点-导入后请在订阅来源添加真实订阅"]
-    filter: "(?i)(美|US|United\\\\s*States|America)"
-    interval: 300
+      - DIRECT
+  - name: "💻 Local"
+    type: select
+    proxies:
+      - "🎯 全球直连"
+      - "🚀 Proxy"
+  - name: "🚀 Proxy"
+    type: select
+    proxies:
+      - "🇺🇸 美国节点"
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🤖 人工智能"
+    type: select
+    proxies:
+      - "🇺🇸 美国节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇹🇼 台湾节点"
+      - "🇭🇰 香港节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🎥 Netflix"
+    type: select
+    proxies:
+      - "🇸🇬 新加坡节点"
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "📺 YouTube"
+    type: select
+    proxies:
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🎵 TikTok"
+    type: select
+    proxies:
+      - "🇺🇸 美国节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇹🇼 台湾节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "✈️ Telegram"
+    type: select
+    proxies:
+      - "🇸🇬 新加坡节点"
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🐦 Twitter"
+    type: select
+    proxies:
+      - "🇭🇰 香港节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇺🇸 美国节点"
+      - "🇹🇼 台湾节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🐳 Docker"
+    type: select
+    proxies:
+      - "🇺🇸 美国节点"
+      - "🇭🇰 香港节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇹🇼 台湾节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🔍 Google"
+    type: select
+    proxies:
+      - "🇺🇸 美国节点"
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🍿 TheMovieDb"
+    type: select
+    proxies:
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🎮 Steam"
+    type: select
+    proxies:
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🍎 Apple"
+    type: select
+    proxies:
+      - "🎯 全球直连"
+      - "🇭🇰 香港节点"
+      - "🇺🇸 美国节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇹🇼 台湾节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+  - name: "🎮  EpicGames"
+    type: select
+    proxies:
+      - "🎯 全球直连"
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+  - name: "🐙 GitHub"
+    type: select
+    proxies:
+      - "🇭🇰 香港节点"
+      - "🇺🇸 美国节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇹🇼 台湾节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🎧 Spotify"
+    type: select
+    proxies:
+      - "🇭🇰 香港节点"
+      - "🇸🇬 新加坡节点"
+      - "🇯🇵 日本节点"
+      - "🇹🇼 台湾节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🇨🇳 China"
+    type: select
+    proxies:
+      - "🎯 全球直连"
+      - "🚀 Proxy"
+
+rule-providers:
+  Local:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/private.yaml
+    path: ./ruleset/Local.yaml
+    interval: 86400
+  AIChat:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/category-ai-!cn.yaml
+    path: ./ruleset/AIChat.yaml
+    interval: 86400
+  Netflix:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/netflix.yaml
+    path: ./ruleset/Netflix.yaml
+    interval: 86400
+  Netflix_IP:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.yaml
+    path: ./ruleset/Netflix_IP.yaml
+    interval: 86400
+  TikTok:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/tiktok.yaml
+    path: ./ruleset/TikTok.yaml
+    interval: 86400
+  Telegram:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/telegram.yaml
+    path: ./ruleset/Telegram.yaml
+    interval: 86400
+  Telegram_IP:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.yaml
+    path: ./ruleset/Telegram_IP.yaml
+    interval: 86400
+  YouTube:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/youtube.yaml
+    path: ./ruleset/YouTube.yaml
+    interval: 86400
+  Twitter:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/twitter.yaml
+    path: ./ruleset/Twitter.yaml
+    interval: 86400
+  Twitter_IP:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/twitter.yaml
+    path: ./ruleset/Twitter_IP.yaml
+    interval: 86400
+  Google:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/google.yaml
+    path: ./ruleset/Google.yaml
+    interval: 86400
+  Google_IP:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.yaml
+    path: ./ruleset/Google_IP.yaml
+    interval: 86400
+  TheMovieDb:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/themoviedb.yaml
+    path: ./ruleset/TheMovieDb.yaml
+    interval: 86400
+  Docker:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/docker.yaml
+    path: ./ruleset/Docker.yaml
+    interval: 86400
+  GitHub:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/github.yaml
+    path: ./ruleset/GitHub.yaml
+    interval: 86400
+  Spotify:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/spotify.yaml
+    path: ./ruleset/Spotify.yaml
+    interval: 86400
+  Steam中国:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/steam@cn.yaml
+    path: ./ruleset/Steam中国.yaml
+    interval: 86400
+  Steam:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/steam.yaml
+    path: ./ruleset/Steam.yaml
+    interval: 86400
+  EpicGames:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/epicgames.yaml
+    path: ./ruleset/EpicGames.yaml
+    interval: 86400
+  Apple@CN:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/apple@cn.yaml
+    path: ./ruleset/Apple@CN.yaml
+    interval: 86400
+  Apple-Update:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/apple-update.yaml
+    path: ./ruleset/Apple-Update.yaml
+    interval: 86400
+  Apple:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/apple.yaml
+    path: ./ruleset/Apple.yaml
+    interval: 86400
+  Microsoft@CN:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/microsoft@cn.yaml
+    path: ./ruleset/Microsoft@CN.yaml
+    interval: 86400
+  Microsoft:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/microsoft.yaml
+    path: ./ruleset/Microsoft.yaml
+    interval: 86400
+  Proxy:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/geolocation-!cn.yaml
+    path: ./ruleset/Proxy.yaml
+    interval: 86400
+  China:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/cn.yaml
+    path: ./ruleset/China.yaml
+    interval: 86400
+  China_IP:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.yaml
+    path: ./ruleset/China_IP.yaml
+    interval: 86400
 
 rules:
-  - DOMAIN-SUFFIX,openai.com,US 美国节点
-  - DOMAIN-SUFFIX,anthropic.com,US 美国节点
-  - DOMAIN-SUFFIX,claude.ai,US 美国节点
-  - DOMAIN-SUFFIX,youtube.com,HK 香港节点
-  - DOMAIN-SUFFIX,googlevideo.com,HK 香港节点
-  - DOMAIN-SUFFIX,netflix.com,SG 新加坡节点
-  - DOMAIN-SUFFIX,t.me,SG 新加坡节点
-  - DOMAIN-SUFFIX,telegram.org,SG 新加坡节点
-  - DOMAIN-SUFFIX,github.com,🚀 默认代理
-  - DOMAIN-SUFFIX,githubusercontent.com,🚀 默认代理
-  - DOMAIN-SUFFIX,apple.com,DIRECT
-  - DOMAIN-SUFFIX,icloud.com,DIRECT
-  - DOMAIN-SUFFIX,cn,DIRECT
-  - DOMAIN-SUFFIX,baidu.com,DIRECT
-  - DOMAIN-SUFFIX,qq.com,DIRECT
-  - DOMAIN-SUFFIX,bilibili.com,DIRECT
-  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
-  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
-  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
-  - MATCH,🚀 默认代理`
+  - RULE-SET,Local,💻 Local
+  - RULE-SET,AIChat,🤖 人工智能
+  - RULE-SET,Netflix,🎥 Netflix
+  - RULE-SET,Netflix_IP,🎥 Netflix,no-resolve
+  - RULE-SET,TikTok,🎵 TikTok
+  - RULE-SET,Telegram,✈️ Telegram
+  - RULE-SET,Telegram_IP,✈️ Telegram,no-resolve
+  - RULE-SET,YouTube,📺 YouTube
+  - RULE-SET,Twitter,🐦 Twitter
+  - RULE-SET,Twitter_IP,🐦 Twitter,no-resolve
+  - RULE-SET,Google,🔍 Google
+  - RULE-SET,Google_IP,🔍 Google,no-resolve
+  - RULE-SET,TheMovieDb,🍿 TheMovieDb
+  - RULE-SET,Docker,🐳 Docker
+  - RULE-SET,GitHub,🐙 GitHub
+  - RULE-SET,Spotify,🎧 Spotify
+  - RULE-SET,Steam中国,🎯 全球直连
+  - RULE-SET,Steam,🎮 Steam
+  - RULE-SET,EpicGames,🎮  EpicGames
+  - RULE-SET,Apple@CN,🎯 全球直连
+  - RULE-SET,Apple-Update,🎯 全球直连
+  - RULE-SET,Apple,🍎 Apple
+  - RULE-SET,Microsoft@CN,🎯 全球直连
+  - RULE-SET,Microsoft,🚀 Proxy
+  - RULE-SET,Proxy,🚀 Proxy
+  - RULE-SET,China,🇨🇳 China
+  - RULE-SET,China_IP,🇨🇳 China,no-resolve
+  - MATCH,🚀 Proxy`
   },
-  minimal:{
-    name:'Mihomo 极简分流方案',
-    desc:'包含默认代理组与基础直连分流模板，适合轻量自定义',
-    yaml:`mixed-port: 17890
+  server:{
+    name:'Mihomo 服务端版本方案',
+    desc:'基于服务端/旁路由网关配置模板（含 TProxy / Fake-IP 28.0.0.0/8 / 地区自动测速组 / 常用应用分流，已移除 PT 与个人自定义规则）',
+    yaml:`socks-port: 9666
+mixed-port: 7890
+tproxy-port: 7895
 allow-lan: true
 mode: rule
 log-level: info
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+find-process-mode: off
+global-client-fingerprint: chrome
 
-proxies:
-  - name: "示例节点-导入后请在订阅来源添加真实订阅"
-    type: trojan
-    server: example.com
-    port: 443
-    password: "password"
-    sni: example.com
-    udp: true
+dns:
+  enable: true
+  ipv6: false
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 28.0.0.0/8
+  fake-ip-filter-mode: blacklist
+  respect-rules: false
+  default-nameserver:
+    - 127.0.0.1:53
+  proxy-server-nameserver:
+    - 127.0.0.1:53
+  direct-nameserver:
+    - 127.0.0.1:53
+  nameserver:
+    - 127.0.0.1:53
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - "localhost.ptlogin2.qq.com"
+
+iptables:
+  enable: false
+
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  force-dns-mapping: true
+  override-destination: false
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  skip-domain:
+    - "+.Mijia Cloud"
+    - "+.push.apple.com"
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+proxy-providers:
+  机场订阅:
+    type: http
+    url: "https://example.com/your-subscription-url"
+    path: ./proxy_providers/机场订阅.yaml
+    interval: 3600
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 300
+
+proxies: []
 
 proxy-groups:
-  - name: "🚀 默认代理"
+  - name: "🇺🇸 美国节点"
+    type: url-test
+    use:
+      - 机场订阅
+    filter: '(?i)(?:美国|US|United States|\\bUS\\b)'
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    lazy: true
+    tolerance: 50
+    timeout: 2000
+    max-failed-times: 3
+  - name: "🇭🇰 香港节点"
+    type: url-test
+    use:
+      - 机场订阅
+    filter: '(?i)(?:香港|HK|Hong Kong|\\bHK\\b)'
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    lazy: true
+    tolerance: 50
+    timeout: 2000
+    max-failed-times: 3
+  - name: "🇹🇼 台湾节点"
+    type: url-test
+    use:
+      - 机场订阅
+    filter: '(?i)(?:台湾|TW|Taiwan|\\bTW\\b)'
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    lazy: true
+    tolerance: 50
+    timeout: 2000
+    max-failed-times: 3
+  - name: "🇯🇵 日本节点"
+    type: url-test
+    use:
+      - 机场订阅
+    filter: '(?i)(?:日本|JP|Japan|\\bJP\\b)'
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    lazy: true
+    tolerance: 50
+    timeout: 2000
+    max-failed-times: 3
+  - name: "🇸🇬 新加坡节点"
+    type: url-test
+    use:
+      - 机场订阅
+    filter: '(?i)(?:新加坡|狮城|SG|Singapore|\\bSG\\b)'
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    lazy: true
+    tolerance: 50
+    timeout: 2000
+    max-failed-times: 3
+  - name: "☁️ 全部"
+    type: select
+    use:
+      - 机场订阅
+  - name: "🎯 全球直连"
     type: select
     proxies:
-      - "示例节点-导入后请在订阅来源添加真实订阅"
-      - "DIRECT"
+      - DIRECT
+  - name: "💻 Local"
+    type: select
+    proxies:
+      - "🎯 全球直连"
+      - "🚀 Proxy"
+  - name: "🚀 Proxy"
+    type: select
+    proxies:
+      - "🇺🇸 美国节点"
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🤖 人工智能"
+    type: select
+    proxies:
+      - "🇺🇸 美国节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇹🇼 台湾节点"
+      - "🇭🇰 香港节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🎥 Netflix"
+    type: select
+    proxies:
+      - "🇸🇬 新加坡节点"
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "📺 YouTube"
+    type: select
+    proxies:
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🎵 TikTok"
+    type: select
+    proxies:
+      - "🇺🇸 美国节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇹🇼 台湾节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "✈️ Telegram"
+    type: select
+    proxies:
+      - "🇸🇬 新加坡节点"
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🐦 Twitter"
+    type: select
+    proxies:
+      - "🇭🇰 香港节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇺🇸 美国节点"
+      - "🇹🇼 台湾节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🐳 Docker"
+    type: select
+    proxies:
+      - "🇺🇸 美国节点"
+      - "🇭🇰 香港节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇹🇼 台湾节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🔍 Google"
+    type: select
+    proxies:
+      - "🇺🇸 美国节点"
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🍿 TheMovieDb"
+    type: select
+    proxies:
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🎮 Steam"
+    type: select
+    proxies:
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🎮  EpicGames"
+    type: select
+    proxies:
+      - "🎯 全球直连"
+      - "🇭🇰 香港节点"
+      - "🇹🇼 台湾节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+  - name: "🐙 GitHub"
+    type: select
+    proxies:
+      - "🇭🇰 香港节点"
+      - "🇺🇸 美国节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇹🇼 台湾节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🎧 Spotify"
+    type: select
+    proxies:
+      - "🇭🇰 香港节点"
+      - "🇸🇬 新加坡节点"
+      - "🇯🇵 日本节点"
+      - "🇹🇼 台湾节点"
+      - "🇺🇸 美国节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+      - "🎯 全球直连"
+  - name: "🍎 Apple"
+    type: select
+    proxies:
+      - "🎯 全球直连"
+      - "🇭🇰 香港节点"
+      - "🇺🇸 美国节点"
+      - "🇯🇵 日本节点"
+      - "🇸🇬 新加坡节点"
+      - "🇹🇼 台湾节点"
+      - "🚀 Proxy"
+      - "☁️ 全部"
+
+rule-providers:
+  Local:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/private.yaml
+    path: ./ruleset/Local.yaml
+    interval: 86400
+  AIChat:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/category-ai-!cn.yaml
+    path: ./ruleset/AIChat.yaml
+    interval: 86400
+  Netflix:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/netflix.yaml
+    path: ./ruleset/Netflix.yaml
+    interval: 86400
+  Netflix_IP:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.yaml
+    path: ./ruleset/Netflix_IP.yaml
+    interval: 86400
+  TikTok:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/tiktok.yaml
+    path: ./ruleset/TikTok.yaml
+    interval: 86400
+  Telegram:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/telegram.yaml
+    path: ./ruleset/Telegram.yaml
+    interval: 86400
+  Telegram_IP:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.yaml
+    path: ./ruleset/Telegram_IP.yaml
+    interval: 86400
+  YouTube:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/youtube.yaml
+    path: ./ruleset/YouTube.yaml
+    interval: 86400
+  Twitter:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/twitter.yaml
+    path: ./ruleset/Twitter.yaml
+    interval: 86400
+  Twitter_IP:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/twitter.yaml
+    path: ./ruleset/Twitter_IP.yaml
+    interval: 86400
+  Google:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/google.yaml
+    path: ./ruleset/Google.yaml
+    interval: 86400
+  Google_IP:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.yaml
+    path: ./ruleset/Google_IP.yaml
+    interval: 86400
+  TheMovieDb:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/themoviedb.yaml
+    path: ./ruleset/TheMovieDb.yaml
+    interval: 86400
+  Docker:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/docker.yaml
+    path: ./ruleset/Docker.yaml
+    interval: 86400
+  GitHub:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/github.yaml
+    path: ./ruleset/GitHub.yaml
+    interval: 86400
+  Spotify:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/spotify.yaml
+    path: ./ruleset/Spotify.yaml
+    interval: 86400
+  Steam:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/steam.yaml
+    path: ./ruleset/Steam.yaml
+    interval: 86400
+  EpicGames:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/epicgames.yaml
+    path: ./ruleset/EpicGames.yaml
+    interval: 86400
+  Apple:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/apple.yaml
+    path: ./ruleset/Apple.yaml
+    interval: 86400
+  Microsoft:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/microsoft.yaml
+    path: ./ruleset/Microsoft.yaml
+    interval: 86400
+  Proxy:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/Classical/geolocation-!cn.yaml
+    path: ./ruleset/Proxy.yaml
+    interval: 86400
 
 rules:
-  - DOMAIN-SUFFIX,cn,DIRECT
-  - DOMAIN-SUFFIX,baidu.com,DIRECT
-  - DOMAIN-SUFFIX,qq.com,DIRECT
-  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
-  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
-  - MATCH,🚀 默认代理`
+  - DOMAIN-SUFFIX,lan,DIRECT
+  - RULE-SET,Local,💻 Local
+  - RULE-SET,AIChat,🤖 人工智能
+  - RULE-SET,Netflix,🎥 Netflix
+  - RULE-SET,Netflix_IP,🎥 Netflix,no-resolve
+  - RULE-SET,TikTok,🎵 TikTok
+  - RULE-SET,Telegram,✈️ Telegram
+  - RULE-SET,Telegram_IP,✈️ Telegram,no-resolve
+  - RULE-SET,YouTube,📺 YouTube
+  - RULE-SET,Twitter,🐦 Twitter
+  - RULE-SET,Twitter_IP,🐦 Twitter,no-resolve
+  - RULE-SET,Google,🔍 Google
+  - RULE-SET,Google_IP,🔍 Google,no-resolve
+  - RULE-SET,TheMovieDb,🍿 TheMovieDb
+  - RULE-SET,Docker,🐳 Docker
+  - RULE-SET,GitHub,🐙 GitHub
+  - RULE-SET,Spotify,🎧 Spotify
+  - RULE-SET,Steam,🎮 Steam
+  - RULE-SET,EpicGames,🎮  EpicGames
+  - RULE-SET,Apple,🍎 Apple
+  - RULE-SET,Microsoft,🚀 Proxy
+  - RULE-SET,Proxy,🚀 Proxy
+  - MATCH,🚀 Proxy`
   }
 };
 async function openConfigImport(initialTemplate=''){
   try{await saveSpaceDrafts();await refreshSpaceCatalog()}catch(error){toast(error.message);return}
   showDialog(initialTemplate?'从 Mihomo 模板创建方案':'导入 Mihomo 配置 / 选择模板',`<form id="config-import-form">
-    <p class="scope-editor-note">${badge('独立新方案','accent')} 支持直接上传或粘贴 Mihomo (<code>.yaml</code>) 配置、配置包 (<code>.zip</code>)，也可点击下方模板填入后自行调整再导入。</p>
+    <p class="scope-editor-note">${badge('独立新方案','accent')} 支持直接上传或粘贴 Mihomo (<code>.yaml</code>) 配置、配置包 (<code>.zip</code>)，也可点击下方客户端/服务端版本模板填入后自行调整再导入。</p>
     <div class="preset-pill-box">
-      <div class="preset-pill-header"><span>📦 载入 Mihomo 配置模板（点击填入下方编辑框，可自由修改后再导入）：</span></div>
+      <div class="preset-pill-header"><span>📦 载入内置 Mihomo 配置模板（点击填入下方编辑框，已去除 PT 与个人自定义规则）：</span></div>
       <div class="preset-pill-list">
-        <button type="button" class="preset-pill" data-ci-tpl="standard">📄 标准地区分流模板（港/台/日/新/美 + 常用规则）</button>
-        <button type="button" class="preset-pill" data-ci-tpl="minimal">🪶 极简轻量模板（默认代理 + 国内直连）</button>
+        <button type="button" class="preset-pill" data-ci-tpl="client">💻 客户端版本模板（TUN + Fake-IP + 地区组 + 国内外分流）</button>
+        <button type="button" class="preset-pill" data-ci-tpl="server">🖥️ 服务端版本模板（TProxy + Fake-IP 28.0.0.0/8 + 旁路由网关分流）</button>
       </div>
     </div>
     <div class="fields">
@@ -139,11 +1182,11 @@ async function openConfigImport(initialTemplate=''){
       <label class="field">说明（可选）<input id="ci-description" maxlength="500" placeholder="例如：从 Mihomo YAML 导入或基于模板创建"></label>
     </div>
     <label class="field">选择 Mihomo 配置文件（.yaml / .yml / .zip / .json）<input id="ci-file" type="file" accept=".yaml,.yml,.json,.zip"></label>
-    <label class="field">或者直接粘贴 / 编辑 Mihomo 配置内容（YAML）<textarea id="ci-text" class="mono" rows="8" spellcheck="false" placeholder="粘贴 Mihomo config.yaml 内容，或点击上方「📦 载入 Mihomo 配置模板」…"></textarea></label>
+    <label class="field">或者直接粘贴 / 编辑 Mihomo 配置内容（YAML）<textarea id="ci-text" class="mono" rows="8" spellcheck="false" placeholder="粘贴 Mihomo config.yaml 内容，或点击上方「💻 客户端版本模板 / 🖥️ 服务端版本模板」…"></textarea></label>
     <details class="advanced-options">
       <summary>高级导入选项（模式与 LocalDNS 附加）</summary>
       <label class="field" style="margin-top:10px">空间类型<select id="ci-mode">
-        <option value="auto">自动识别（推荐：标准 Mihomo 配置可自由编辑节点组与规则）</option>
+        <option value="auto">自动识别（推荐：保留 proxy-providers / rule-providers 原生结构）</option>
         <option value="native">Mihomo 原生空间（100% 原样保留 proxy-providers / rule-providers）</option>
         <option value="portable">通用标准空间（支持同时导出 Mihomo YAML 与 sing-box JSON）</option>
       </select></label>
@@ -426,7 +1469,7 @@ function paintSpaceCards(){
     refreshSpacePresets().then(()=>{if(page==='spaces')paintSpaceCards()});
   }
   const entries=spaceCatalog?.spaces||[];
-  $('#content').innerHTML=`<div class="configuration-overview"><div><h2>Mihomo 配置导入、模板与导出</h2><p>支持直接导入现有 Mihomo YAML 配置，或选用内置 Mihomo 模板新建配置空间后按需配置订阅、分组与规则；随时一键导出 <code>mihomo.yaml</code> 或复制持久订阅链接。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button primary" id="space-import-config">📥 导入 Mihomo 配置</button><button type="button" class="button" id="space-template-create">📦 从 Mihomo 模板新建</button><button type="button" class="button" id="space-export-current">📤 导出当前 Mihomo 配置</button><button type="button" class="button" id="space-open-subscription">高级订阅链接设置</button></div></div><div><h2>Hermes 智能助手 & HTTP MCP</h2><p>一行命令配好 Hermes 或直连 <code>/mcp</code> 接口，用自然语言查分流、一句话置顶加规则并自动热重载客户端。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button" id="space-open-hermes">配置 Hermes / MCP 接入</button></div></div></div><div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{
+  $('#content').innerHTML=`<div class="configuration-overview"><div><h2>Mihomo 配置导入、模板与导出</h2><p>支持直接导入现有 Mihomo YAML 配置，或选用内置的<strong>客户端版本模板</strong> / <strong>服务端版本模板</strong>（已去除 PT 与个人自定义规则）新建配置空间；随时一键导出 <code>mihomo.yaml</code> 或复制持久订阅链接。</p><div class="filter-row" style="margin-top:10px;flex-wrap:wrap"><button type="button" class="button primary" id="space-import-config">📥 导入 Mihomo 配置</button><button type="button" class="button" id="space-template-client">💻 从客户端模板新建</button><button type="button" class="button" id="space-template-server">🖥️ 从服务端模板新建</button><button type="button" class="button" id="space-export-current">📤 导出当前 Mihomo 配置</button><button type="button" class="button" id="space-open-subscription">高级订阅链接设置</button></div></div></div><div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{
     const current=s.id===spaceId,counts=s.counts||{},g=s.generation||{},issues=g.excluded_policies?.length||0;
     const savedLink=(spacePresetsCache.links_by_space?.[s.id]||[]).at(-1);
     const linkPreview=savedLink?.url||`${location.origin}/s/<点击右侧按钮一键生成并复制>/${s.proxy==='sing-box'&&!s.native?'sing-box.json':'mihomo.yaml'}`;
@@ -438,10 +1481,10 @@ function paintSpaceCards(){
     return `<article class="panel space-card ${current?'selected':''}" aria-label="${esc(s.name)}配置空间"><div class="space-card-heading"><div><h2>${esc(s.name)}</h2><p>${s.native?'Mihomo YAML':s.proxy==='sing-box'?'sing-box JSON':'Mihomo YAML'} · ${s.native?'原生引用与缓存':{inline:'内联规则',local:'本地文件引用',remote:'远程订阅引用'}[s.rule_output]||'内联规则'}</p></div>${current?badge('当前使用中','accent'):badge('未激活')}</div><p class="space-description">${esc(s.description||'节点组 + 规则 + 分流策略的生成方案')}</p><div class="space-counts"><span><b>${counts.groups||0}</b> 节点组</span><span><b>${counts.library||0}</b> 规则</span><span><b>${counts.policies||0}</b> 策略</span></div><div class="space-inline-sub-box"><div class="space-inline-sub-label"><span>🔗 专属持久订阅链接（填入客户端 / LocalDNS 自动拉取更新）</span></div><div class="space-inline-sub-row"><input type="text" class="mono" readonly value="${esc(linkPreview)}" aria-label="${esc(s.name)}订阅链接"><button type="button" class="button primary" data-space-copy-sub="${esc(s.id)}">📋 直接复制</button></div></div><div class="space-inline-ctrl-bar"><div class="space-inline-ctrl-info"><span>🔄 客户端自动重载：</span>${ctrlConnected?`<strong style="color:#34d399">● 已绑定 (${esc(ctrl.url)}) · 改规则 0 秒热重载</strong>`:`<span>未绑定（可选填 Mihomo Controller，改规则自动热重载）</span>`}</div><div class="filter-row" style="gap:8px">${ctrlConnected?`<button type="button" class="text-button" data-space-reload-now="${esc(s.id)}">立即重载</button>`:''}<button type="button" class="text-button" data-space-controller="${esc(s.id)}">${ctrlConnected?'修改控制器':'绑定客户端控制器'}</button></div></div><p class="space-readiness ${g.error?'error-message':'generation-ready'}">${g.error?esc(g.error):g.valid?'代理选用检查通过':'等待代理检查'}${issues?` · 跳过 ${issues} 条策略`:''}</p><div class="space-card-actions">${actions}</div></article>`;
   }).join('')}</div><p class="preview-note">“当前使用中”表示左侧导航正在编辑该方案。切换方案或导出前都会自动执行原生内核校验。</p>`;
   $('#space-import-config').onclick=()=>openConfigImport();
-  $('#space-template-create').onclick=()=>openConfigImport('standard');
+  $('#space-template-client').onclick=()=>openConfigImport('client');
+  $('#space-template-server').onclick=()=>openConfigImport('server');
   $('#space-export-current').onclick=()=>openConfigurationExport('proxy');
   $('#space-open-subscription').onclick=openSubscriptionLink;
-  $('#space-open-hermes').onclick=openHermesIntegration;
   $$('[data-space-copy-sub]').forEach(b=>b.onclick=()=>copySpaceSubscriptionDirect(b.dataset.spaceCopySub));
   $$('[data-space-controller]').forEach(b=>b.onclick=()=>openClientControllerModal(b.dataset.spaceController));
   $$('[data-space-reload-now]').forEach(b=>b.onclick=async()=>{
