@@ -50,7 +50,15 @@ class AuthStore:
             return
         if os.environ.get("YOMESH_REQUIRE_AUTH") == "1":
             user = os.environ.get("YOMESH_INIT_USER", "admin").strip() or "admin"
-            password = os.environ.get("YOMESH_INIT_PASSWORD", "admin123")
+            password = os.environ.get("YOMESH_INIT_PASSWORD", "")
+            if not password:
+                # Fail closed: never bootstrap an admin account with a publicly
+                # known default password (fixes H1).
+                raise AuthUnavailable(
+                    "YOMESH_REQUIRE_AUTH=1 但未设置 YOMESH_INIT_PASSWORD："
+                    "拒绝使用默认口令启动。请设置 YOMESH_INIT_PASSWORD"
+                    "（建议 12 位以上随机口令）后重试。"
+                )
             self._write_credentials(user, password, enabled=True)
 
     def _read(self) -> dict:
