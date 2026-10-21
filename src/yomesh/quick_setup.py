@@ -520,8 +520,16 @@ def quick_add_region_groups(spaces, space_id: str, requested_keys: list[str] | N
 
 
 def quick_create_space(spaces, publications, request: dict, default_base_url: str) -> dict:
-    """Create a ready-to-use space in 1 step from subscription URL + selected regions + preset rules."""
-    name = str(request.get("name") or "").strip() or "快速配置方案"
+    """Create an isolated, ready-to-use space in 1 step from subscription URL + selected regions + preset rules."""
+    raw_name = str(request.get("name") or "").strip() or "快速配置方案"
+    existing_names = {s.get("name") for s in spaces.snapshot().get("spaces", [])}
+    name = raw_name[:80]
+    if name in existing_names:
+        suffix = 2
+        while f"{raw_name[:74]} ({suffix})" in existing_names:
+            suffix += 1
+        name = f"{raw_name[:74]} ({suffix})"
+
     proxy = str(request.get("proxy") or "mihomo").strip()
     if proxy not in {"mihomo", "sing-box"}:
         proxy = "mihomo"
@@ -534,61 +542,34 @@ def quick_create_space(spaces, publications, request: dict, default_base_url: st
     if not isinstance(selected_rules, list):
         selected_rules = [r["key"] for r in PRESET_RULES]
 
-    catalog_rev = spaces.snapshot()["revision"]
-    created_catalog = spaces.save(
-        {
-            "name": name[:80],
-            "description": "通过快速向导一键创建的完整代理方案",
-            "proxy": proxy,
-            "rule_output": "inline",
-            "draft": True,
-            "composition": {"groups": None, "rules": None, "policies": None, "fallback": "g_default"},
-        },
-        catalog_rev,
-    )
-    new_space_id = created_catalog["id"]
-    runtime = spaces.runtime(new_space_id)
-
     urls = [u.strip() for u in re.split(r"[\r\n]+", sub_url) if u.strip()]
-    created_source_ids = []
-    for idx, u in enumerate(urls):
-        try:
-            snap = spaces.workspace_snapshot(new_space_id)
-            sid = runtime.workspace.save_source(
-                {
-                    "name": sub_name if idx == 0 else f"{sub_name} {idx + 1}",
-                    "url": u,
-                    "format": "auto",
-                    "enabled": True,
-                    "auto_update": True,
-                    "interval_hours": 6,
-                },
-                revision=snap["revision"],
-            )
-            created_source_ids.append(sid)
-        except Exception:
-            pass
-
-    snap = spaces.workspace_snapshot(new_space_id)
-    profile = deepcopy(snap["profile"])
-    revision = snap["revision"]
-
-    if not profile.get("nodes"):
-        profile["nodes"] = [{
-            "id": "n_seed_default",
-            "name": "🇭🇰香港 🇹🇼台湾 🇯🇵日本 🇸🇬新加坡 🇺🇸美国 · 示例节点",
-            "protocol": "trojan",
-            "server": "node.example.com",
-            "port": 443,
-            "password": "seed-password",
-            "tls": {"enabled": True, "server_name": "node.example.com", "insecure": False},
-            "udp": True,
-            "source": "manual",
+    sources = [
+        {
+            "id": f"s_main_{idx + 1}",
+            "name": sub_name if idx == 0 else f"{sub_name} {idx + 1}",
+            "url": u,
+            "format": "auto",
             "enabled": True,
-        }]
+            "auto_update": True,
+            "interval_hours": 6,
+        }
+        for idx, u in enumerate(urls)
+    ]
+    nodes = [{
+        "id": "n_seed_default",
+        "name": "🇭🇰香港 🇹🇼台湾 🇯🇵日本 🇸🇬新加坡 🇺🇸美国 · 示例节点",
+        "protocol": "trojan",
+        "server": "node.example.com",
+        "port": 443,
+        "password": "seed-password",
+        "tls": {"enabled": True, "server_name": "node.example.com", "insecure": False},
+        "udp": True,
+        "source": "manual",
+        "enabled": True,
+    }]
 
-    source_ids = [s["id"] for s in profile.get("sources", [])]
-    node_ids = [n["id"] for n in profile.get("nodes", [])]
+    source_ids = [s["id"] for s in sources]
+    node_ids = [n["id"] for n in nodes]
 
     groups = []
     region_id_by_key = {}
@@ -622,7 +603,6 @@ def quick_create_space(spaces, publications, request: dict, default_base_url: st
         "interval": 300,
         "enabled": True,
     })
-    profile["groups"] = groups
 
     library = []
     policies = []
@@ -659,17 +639,31 @@ def quick_create_space(spaces, publications, request: dict, default_base_url: st
             "enabled": True,
         })
 
-    profile["library"] = library
-    profile["policies"] = policies
-    profile["fallback"] = "g_default"
-    if profile.get("routing_plans"):
-        profile["routing_plans"][0]["policies"] = deepcopy(policies)
-        profile["routing_plans"][0]["fallback"] = "g_default"
-    profile["composition"] = {"groups": None, "rules": None, "policies": None, "fallback": "g_default"}
+    profile = {
+        "schema_version": 1,
+        "name": name,
+        "sources": sources,
+        "nodes": nodes,
+        "groups": groups,
+        "library": library,
+        "policies": policies,
+        "fallback": "g_default",
+        "settings": {},
+    }
 
-    saved_ws = spaces.save_profile(profile, revision, new_space_id)
+    catalog_rev = spaces.snapshot()["revision"]
+    created_catalog = spaces.import_profile(
+        profile,
+        name=name,
+        revision=catalog_rev,
+        description="通过快速向导一键创建的完整代理方案",
+        proxy=proxy,
+        rule_output="inline",
+    )
+    new_space_id = created_catalog["id"]
     spaces.select(new_space_id, spaces.snapshot()["revision"])
 
+    saved_ws = spaces.workspace_snapshot(new_space_id)
     base_url = str(request.get("base_url") or default_base_url).strip()
     link = None
     try:
@@ -686,7 +680,8 @@ def quick_create_space(spaces, publications, request: dict, default_base_url: st
         links = publications.listing(new_space_id).get("links", [])
         link = links[-1] if links else None
 
-    for sid in created_source_ids:
+    runtime = spaces.runtime(new_space_id)
+    for sid in source_ids:
         try:
             runtime.subscriptions.refresh(sid)
         except Exception:

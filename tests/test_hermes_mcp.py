@@ -137,7 +137,14 @@ class HermesMcpTests(unittest.TestCase):
         self.assertEqual(status, 200, rg_res2)
         self.assertEqual(rg_res2["added_count"], 0)
 
-        # 3. Quick create space builds a complete space in 1 request
+        # 3. Quick create space builds an isolated space even when default space has no g_default group
+        _, default_ws = self.api("/api/workspace")
+        default_prof = default_ws["profile"]
+        default_prof["groups"] = [g for g in default_prof["groups"] if g["id"] != "g_default"]
+        default_prof["fallback"] = "DIRECT"
+        status, saved_def = self.api("/api/workspace", {"profile": default_prof, "revision": default_ws["revision"]})
+        self.assertEqual(status, 200, saved_def)
+
         status, qc_res = self.api(
             "/api/spaces/quick-create",
             {
