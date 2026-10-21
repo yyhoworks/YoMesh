@@ -33,15 +33,20 @@ async function openSubscriptionLink(){
   const busy=value=>{pending=value;$('#close-dialog').disabled=value;$$('#subscription-form button,#subscription-form select,#subscription-form input:not([readonly])').forEach(el=>el.disabled=value)};
   $('#subscription-form').onsubmit=async event=>{
     event.preventDefault();if(pending)return;busy(true);$('#subscription-create').textContent='正在生成并校验…';$('#subscription-error').textContent='';
-    try{current=await api('/api/workspace/subscriptions',{proxy:$('#subscription-proxy')?.value||'mihomo',base_url:$('#subscription-base').value.trim(),rule_address:$('#subscription-form input[name=subscription_rules]:checked').value,revision:liveWorkspace.revision});$('#subscription-url').value=current.url;$('#subscription-result').hidden=false;$('#subscription-settings').open=false;$('#subscription-status').textContent=`原生校验通过 · ${current.rule_count} 个规则来源。${subscriptionDeliverySummary(current)} 链接持有者可读取配置。`}
+    try{current=await api('/api/workspace/subscriptions',{proxy:$('#subscription-proxy')?.value||'mihomo',base_url:$('#subscription-base').value.trim(),rule_address:$('#subscription-form input[name=subscription_rules]:checked').value,revision:liveWorkspace.revision});$('#subscription-url').value=current.url;$('#subscription-result').hidden=false;$('#subscription-settings').open=false;$('#subscription-status').textContent=`原生校验通过 · ${current.rule_count} 个规则来源。${subscriptionDeliverySummary(current)} 链接持有者可读取配置。`;if(typeof spacePresetsCache==='object'&&spacePresetsCache){spacePresetsCache.links_by_space??={};spacePresetsCache.links_by_space[spaceId]=[current];if(page==='spaces'&&typeof paintSpaceCards==='function')paintSpaceCards()}}
     catch(error){$('#subscription-error').textContent=error.message}
     finally{busy(false);$('#subscription-create').textContent='校验并生成链接'}
   };
   $('#subscription-form').addEventListener('input',event=>{if(!pending&&event.target.id!=='subscription-url')$('#subscription-result').hidden=true});
   $('#subscription-copy').onclick=async()=>{try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText($('#subscription-url').value);else{$('#subscription-url').focus();$('#subscription-url').select();if(!document.execCommand('copy'))throw Error('copy unavailable')}toast('配置订阅链接已复制。')}catch(error){$('#subscription-url').focus();$('#subscription-url').select();toast('请复制已选中的链接。')}};
-  $('#subscription-revoke').onclick=async()=>{if(!current||pending)return;busy(true);try{await api('/api/workspace/subscriptions/revoke',{id:current.id});current=null;$('#subscription-settings').open=true;$('#subscription-result').hidden=true;$('#subscription-url').value='';toast('此订阅链接已停用。')}catch(error){$('#subscription-error').textContent=error.message}finally{busy(false)}};
+  $('#subscription-revoke').onclick=async()=>{if(!current||pending)return;busy(true);try{await api('/api/workspace/subscriptions/revoke',{id:current.id});current=null;$('#subscription-settings').open=true;$('#subscription-result').hidden=true;$('#subscription-url').value='';if(typeof spacePresetsCache==='object'&&spacePresetsCache?.links_by_space){spacePresetsCache.links_by_space[spaceId]=[];if(page==='spaces'&&typeof paintSpaceCards==='function')paintSpaceCards()}toast('此订阅链接已停用。')}catch(error){$('#subscription-error').textContent=error.message}finally{busy(false)}};
 }
 
+const quickCopySubBtn=document.createElement('button');
+quickCopySubBtn.id='quick-copy-subscription';quickCopySubBtn.type='button';quickCopySubBtn.className='button';quickCopySubBtn.textContent='🔗 一键复制订阅';
+quickCopySubBtn.title='一键复制当前方案的持久订阅链接（如未生成则自动创建并复制）';
+$('#export').before(quickCopySubBtn);
+quickCopySubBtn.onclick=()=>{if(typeof copySpaceSubscriptionDirect==='function')copySpaceSubscriptionDirect(spaceId);else openSubscriptionLink()};
 const subscriptionButton=document.createElement('button');
 subscriptionButton.id='subscription-link';subscriptionButton.type='button';subscriptionButton.className='button';subscriptionButton.textContent='订阅链接';
 subscriptionButton.disabled=true;

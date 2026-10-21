@@ -16,6 +16,7 @@ from .hermes_service import HermesService
 from .model import ConfigError, Profile
 from .native import find_core, serialize_config, validate_bundle
 from .publication import Publications
+from .quick_setup import ClientControllers, PRESET_REGIONS, PRESET_RULES, quick_add_region_groups, quick_create_space
 from .spaces import ConfigurationSpaces
 from .workspace import Conflict
 
@@ -27,9 +28,10 @@ def handler_for(root: Path, port: int, public_hosts=()):
     publications = Publications(root, spaces)
     hermes_access = HermesAccess(root)
     auth = AuthStore(root)
+    controllers = ClientControllers(root)
     from .interaction_service import InteractionService
     interactions = InteractionService(root, spaces)
-    hermes_service = HermesService(root, spaces, publications, interactions)
+    hermes_service = HermesService(root, spaces, publications, interactions, controllers=controllers)
     subscriptions = spaces.runtime("default").subscriptions
 
     class Handler(SimpleHTTPRequestHandler):
@@ -37,6 +39,7 @@ def handler_for(root: Path, port: int, public_hosts=()):
         space_catalog = spaces
         hermes_store = hermes_access
         auth_store = auth
+        controller_store = controllers
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(root / "web"), **kwargs)
 
@@ -176,6 +179,18 @@ def handler_for(root: Path, port: int, public_hosts=()):
             if self.path == "/api/integrations/hermes":
                 self.json_response(200, hermes_access.listing())
                 return
+            if self.path == "/api/spaces/presets":
+                links_by_space = {
+                    item["id"]: publications.listing(item["id"]).get("links", [])
+                    for item in spaces.snapshot().get("spaces", [])
+                }
+                self.json_response(200, {
+                    "regions": PRESET_REGIONS,
+                    "rules": PRESET_RULES,
+                    "controllers": controllers.all_items(),
+                    "links_by_space": links_by_space,
+                })
+                return
             if self.path == "/api/spaces":
                 self.json_response(200, spaces.snapshot())
                 return
@@ -207,7 +222,7 @@ def handler_for(root: Path, port: int, public_hosts=()):
             if not self.local_request():
                 self.json_response(403, {"error": "请求地址未列入 YoMesh 允许的访问地址"})
                 return
-            if self.path != "/api/export" and not self.path.startswith(("/api/auth", "/api/spaces", "/api/hermes", "/api/integrations/hermes", "/api/sources", "/api/workspace", "/api/nodes", "/api/library", "/api/groups")):
+            if self.path != "/api/export" and not self.path.startswith(("/mcp", "/api/auth", "/api/spaces", "/api/hermes", "/api/integrations/hermes", "/api/sources", "/api/workspace", "/api/nodes", "/api/library", "/api/groups")):
                 self.json_response(404, {"error": "接口不存在"})
                 return
             try:
@@ -218,6 +233,23 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 request = json.loads(self.rfile.read(length).decode("utf-8"))
                 if not isinstance(request, dict):
                     raise ConfigError("请求需要对象")
+                if self.path.startswith("/mcp"):
+                    from urllib.parse import parse_qs, urlsplit
+                    auth_header = self.headers.get("Authorization")
+                    if not auth_header:
+                        q_token = (parse_qs(urlsplit(self.path).query).get("token") or [""])[0].strip()
+                        if q_token:
+                            auth_header = f"Bearer {q_token}"
+                    if not hermes_access.verify(auth_header):
+                        self.json_response(401, {"jsonrpc": "2.0", "id": request.get("id"), "error": {"code": -32001, "message": "Hermes 接入密钥无效或已停用"}})
+                        return
+                    host = self.headers.get("Host") or f"127.0.0.1:{port}"
+                    rpc_resp = hermes_service.handle_mcp_rpc(request, f"http://{host}")
+                    if rpc_resp is None:
+                        self.json_response(202, {"ok": True})
+                    else:
+                        self.json_response(200, rpc_resp)
+                    return
                 if self.path.startswith("/api/hermes/"):
                     if not hermes_access.verify(self.headers.get("Authorization")):
                         self.json_response(401, {"error": "Hermes 接入密钥无效或已停用"})
@@ -268,6 +300,17 @@ def handler_for(root: Path, port: int, public_hosts=()):
                     else:
                         self.json_response(404, {"error": "Hermes 接口不存在"})
                     return
+                if self.path == "/api/spaces/quick-create":
+                    host = self.headers.get("Host") or f"127.0.0.1:{port}"
+                    self.json_response(200, quick_create_space(spaces, publications, request, f"http://{host}"))
+                    return
+                if self.path == "/api/spaces/client-controller":
+                    target_space = str(request.get("space_id") or self.headers.get("X-YoMesh-Space") or spaces.state["active"])
+                    if request.get("action") == "reload":
+                        self.json_response(200, controllers.notify_reload(target_space))
+                    else:
+                        self.json_response(200, controllers.update(target_space, request))
+                    return
                 if self.path == "/api/spaces/group-category-names":
                     self.json_response(200, spaces.save_group_category_names(request.get("names"), request.get("revision")))
                     return
@@ -296,6 +339,12 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 runtime = spaces.runtime(self.headers.get("X-YoMesh-Space"))
                 workspace, library, subscriptions = runtime.workspace, runtime.library, runtime.subscriptions
                 scope = self.headers.get("X-YoMesh-Space")
+                if self.path == "/api/workspace/quick-region-groups":
+                    active_scope = scope or spaces.state["active"]
+                    result = quick_add_region_groups(spaces, active_scope, request.get("regions"))
+                    reload_status = controllers.notify_reload(active_scope)
+                    self.json_response(200, {**result, "client_reload": reload_status})
+                    return
                 if self.path == "/api/workspace/tools":
                     self.json_response(200, interactions.handle(scope or spaces.state["active"], request))
                     return
@@ -343,21 +392,27 @@ def handler_for(root: Path, port: int, public_hosts=()):
                         self.json_response(200, {"policy": row_view(prepared, row), "text": row["text"]})
                     else:
                         snapshot["profile"]["native_configuration"] = change(native, request)
-                        self.json_response(200, spaces.save_profile(snapshot["profile"], request.get("revision"), scope))
+                        saved = spaces.save_profile(snapshot["profile"], request.get("revision"), scope)
+                        controllers.notify_reload(scope or spaces.state["active"])
+                        self.json_response(200, saved)
                     return
                 if self.path == "/api/workspace/native":
                     snapshot = spaces.workspace_snapshot(scope)
                     if "native_configuration" not in snapshot["profile"]:
                         raise ConfigError("当前空间不是原生配置空间")
                     snapshot["profile"]["native_configuration"] = request.get("configuration")
-                    self.json_response(200, spaces.save_profile(snapshot["profile"], request.get("revision"), scope, request.get("share_scope", "current")))
+                    saved = spaces.save_profile(snapshot["profile"], request.get("revision"), scope, request.get("share_scope", "current"))
+                    controllers.notify_reload(scope or spaces.state["active"])
+                    self.json_response(200, saved)
                     return
                 if self.path == "/api/workspace/native-refresh":
                     from .native_configuration import refresh_provider
                     snapshot = spaces.workspace_snapshot(scope)
                     workspace._revision(request.get("revision"))
                     snapshot["profile"]["native_configuration"] = refresh_provider(snapshot["profile"].get("native_configuration"), request.get("section"), request.get("name"))
-                    self.json_response(200, spaces.save_profile(snapshot["profile"], request.get("revision"), scope, "shared"))
+                    saved = spaces.save_profile(snapshot["profile"], request.get("revision"), scope, "shared")
+                    controllers.notify_reload(scope or spaces.state["active"])
+                    self.json_response(200, saved)
                     return
                 if self.path == "/api/workspace/preview-selection":
                     self.json_response(200, spaces.preview_selection(request.get("selection"), request.get("revision"), scope, request.get("blank") is True))
@@ -372,7 +427,9 @@ def handler_for(root: Path, port: int, public_hosts=()):
                     self.json_response(200, workspace.import_legacy(values))
                     return
                 if self.path == "/api/workspace":
-                    self.json_response(200, spaces.save_profile(request.get("profile"), request.get("revision"), scope))
+                    saved = spaces.save_profile(request.get("profile"), request.get("revision"), scope)
+                    controllers.notify_reload(scope or spaces.state["active"])
+                    self.json_response(200, saved)
                     return
                 if self.path == "/api/workspace/import":
                     self.json_response(200, workspace.import_configuration(request.get("configuration"), request.get("revision")))
@@ -381,7 +438,9 @@ def handler_for(root: Path, port: int, public_hosts=()):
                     self.json_response(200, workspace.switch_plan(request.get("id"), request.get("revision")))
                     return
                 if self.path == "/api/workspace/reorder-policies":
-                    self.json_response(200, workspace.reorder_policies(request.get("ids"), request.get("plan"), request.get("revision")))
+                    saved = workspace.reorder_policies(request.get("ids"), request.get("plan"), request.get("revision"))
+                    controllers.notify_reload(scope or spaces.state["active"])
+                    self.json_response(200, saved)
                     return
                 if self.path == "/api/workspace/settings":
                     self.json_response(200, spaces.save_settings(request.get("settings"), request.get("revision"), scope))
@@ -449,7 +508,9 @@ def handler_for(root: Path, port: int, public_hosts=()):
                     if not isinstance(values, list) or not 1 <= len(values) <= 16:
                         raise ConfigError("一次可添加 1–16 条规则")
                     prepared = [library.prepare(item) for item in values]
-                    self.json_response(200, workspace.save_libraries([i for i, _ in prepared], [s for _, s in prepared], request.get("revision")))
+                    saved = workspace.save_libraries([i for i, _ in prepared], [s for _, s in prepared], request.get("revision"))
+                    controllers.notify_reload(scope or spaces.state["active"])
+                    self.json_response(200, saved)
                     return
                 if self.path == "/api/workspace/preview-dns":
                     self.json_response(200, workspace.preview_dns(request.get("settings", {}), spaces.workspace_snapshot(scope)["profile"]))
@@ -479,7 +540,9 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 if self.path == "/api/library/save":
                     workspace._revision(request.get("revision"))
                     item, status = library.prepare(request.get("item", {}))
-                    self.json_response(200, workspace.save_library(item, status, request.get("revision")))
+                    saved = workspace.save_library(item, status, request.get("revision"))
+                    controllers.notify_reload(scope or spaces.state["active"])
+                    self.json_response(200, saved)
                     return
                 match = re.fullmatch(r"/api/library/([A-Za-z0-9_-]+)/(refresh|delete)", self.path)
                 if match:

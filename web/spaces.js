@@ -94,7 +94,7 @@ async function switchSpace(ident){
 
 function renderSpaces(){
   paintSpaceCards();const serial=++spaceListSerial;
-  refreshSpaceCatalog().then(()=>{if(page==='spaces'&&serial===spaceListSerial)paintSpaceCards()}).catch(error=>{if(page==='spaces'){$('#space-list-status').textContent=error.message}});
+  Promise.all([refreshSpaceCatalog(),typeof refreshSpacePresets==='function'?refreshSpacePresets():null]).then(()=>{if(page==='spaces'&&serial===spaceListSerial)paintSpaceCards()}).catch(error=>{if(page==='spaces'){$('#space-list-status').textContent=error.message}});
 }
 function deleteSpace(ident){
   const item=spaceCatalog.spaces.find(s=>s.id===ident);

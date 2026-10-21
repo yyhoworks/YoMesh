@@ -121,6 +121,73 @@ class HermesMcpTests(unittest.TestCase):
         status, denied = self.api("/api/hermes/spaces", headers=auth_headers)
         self.assertEqual(status, 401)
 
+    def test_quick_setup_and_streamable_http_mcp(self):
+        # 1. Presets endpoint returns region & rule presets
+        status, presets = self.api("/api/spaces/presets")
+        self.assertEqual(status, 200, presets)
+        self.assertEqual(len(presets["regions"]), 5)
+        self.assertEqual(len(presets["rules"]), 8)
+
+        # 2. Quick region groups adds missing HK/TW/JP/SG/US groups in 1 click
+        status, rg_res = self.api("/api/workspace/quick-region-groups", {})
+        self.assertEqual(status, 200, rg_res)
+        self.assertGreaterEqual(rg_res["added_count"], 1)
+        # Second call is idempotent
+        status, rg_res2 = self.api("/api/workspace/quick-region-groups", {})
+        self.assertEqual(status, 200, rg_res2)
+        self.assertEqual(rg_res2["added_count"], 0)
+
+        # 3. Quick create space builds a complete space in 1 request
+        status, qc_res = self.api(
+            "/api/spaces/quick-create",
+            {
+                "name": "三步极速方案",
+                "proxy": "mihomo",
+                "subscription_url": "",
+                "regions": ["hk", "us", "sg"],
+                "rules": ["adblock", "ai", "youtube", "cn"],
+                "base_url": self.base,
+            },
+        )
+        self.assertEqual(status, 200, qc_res)
+        self.assertEqual(qc_res["summary"]["groups"], 4)  # Proxy + 3 regions
+        self.assertEqual(qc_res["summary"]["policies"], 4)
+        new_space_id = qc_res["id"]
+
+        # 4. Streamable HTTP MCP (/mcp?token=...) supports JSON-RPC 2.0, batch rules, fuzzy group matching, and top priority
+        _, rotated = self.api("/api/integrations/hermes/rotate", {})
+        token = rotated["token"]
+        status, init_rpc = self.api(
+            f"/mcp?token={token}",
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        )
+        self.assertEqual(status, 200, init_rpc)
+        self.assertEqual(init_rpc["result"]["serverInfo"]["name"], "yomesh-hermes-mcp")
+
+        status, call_rpc = self.api(
+            f"/mcp?token={token}",
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "yomesh_add_rule",
+                    "arguments": {
+                        "entry": "claude.ai, cursor.sh",
+                        "target": "美国",
+                        "space": new_space_id,
+                    },
+                },
+            },
+        )
+        self.assertEqual(status, 200, call_rpc)
+        payload = json.loads(call_rpc["result"]["content"][0]["text"])
+        self.assertEqual(payload["status"], "added")
+        self.assertEqual(payload["priority_rank"], 1)
+        self.assertEqual(payload["target_name"], "US 美国节点")
+        self.assertEqual(len(payload["entries"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
+

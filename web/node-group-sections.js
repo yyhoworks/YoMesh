@@ -26,7 +26,7 @@ const groupInCategory=category=>category===nodeGroupCategory;
 function groupCategoryTabs(locations){
   updateGroupCategoryLabels();
   const counts={lines:0,home:0,shared:0};locations.forEach(m=>{if(Object.hasOwn(counts,m.category))counts[m.category]++});
-  return `<div class="group-category-toolbar"><div class="group-category-tabs" role="tablist" aria-label="节点组分类">${Object.entries(groupSectionLabels).map(([key,[label]])=>`<button type="button" class="button ${nodeGroupCategory===key?'active':''}" id="group-category-${key}" role="tab" aria-controls="group-category-panel" aria-selected="${nodeGroupCategory===key}" tabindex="${nodeGroupCategory===key?'0':'-1'}" data-group-category="${key}">${esc(label)}<span>${counts[key]}</span></button>`).join('')}</div><button type="button" class="text-button" id="manage-group-categories">管理分类</button></div>`;
+  return `<div class="group-category-toolbar"><div class="group-category-tabs" role="tablist" aria-label="节点组分类">${Object.entries(groupSectionLabels).map(([key,[label]])=>`<button type="button" class="button ${nodeGroupCategory===key?'active':''}" id="group-category-${key}" role="tab" aria-controls="group-category-panel" aria-selected="${nodeGroupCategory===key}" tabindex="${nodeGroupCategory===key?'0':'-1'}" data-group-category="${key}">${esc(label)}<span>${counts[key]}</span></button>`).join('')}</div><div class="filter-row" style="gap:10px"><button type="button" class="button primary" id="quick-region-groups">⚡ 一键补齐地区分组（港/台/日/新/美）</button><button type="button" class="text-button" id="manage-group-categories">管理分类</button></div></div>`;
 }
 function groupSectionMarkup(section,cards){
   if(!cards.length)return '';
@@ -35,6 +35,18 @@ function groupSectionMarkup(section,cards){
 }
 function bindGroupCategory(paint){
   $('#manage-group-categories').onclick=manageGroupCategoryNames;
+  if($('#quick-region-groups'))$('#quick-region-groups').onclick=async e=>{
+    const btn=e.currentTarget;btn.disabled=true;btn.textContent='正在补齐地区分组…';
+    try{
+      if(typeof dirty==='function'&&dirty())await persist();
+      const res=await api('/api/workspace/quick-region-groups',{});
+      if(res.workspace)adoptWorkspace(res.workspace);
+      toast(res.added_count?`⚡ 已一键补齐 ${res.added_count} 个地区分组（${res.added.join('、')}）！`:'港/台/日/新/美 5 个地区分组已全部存在，无需重复添加。');
+    }catch(error){
+      toast(error.message);
+      btn.disabled=false;btn.textContent='⚡ 一键补齐地区分组（港/台/日/新/美）';
+    }
+  };
   const select=key=>{nodeGroupCategory=key;paint();$(`#group-category-${key}`).focus()};
   $$('[data-group-category]').forEach(button=>{
     button.onclick=()=>select(button.dataset.groupCategory);

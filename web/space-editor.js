@@ -86,6 +86,183 @@ async function openConfigImport(){
     }
   };
 }
+const DEFAULT_PRESET_REGIONS=[
+  {key:'hk',name:'HK 香港节点',badge:'🇭🇰 香港节点 (自动测速)',filter:'(?i)(港|HK|Hong\\s*Kong)'},
+  {key:'tw',name:'TW 台湾节点',badge:'🇹🇼 台湾节点 (自动测速)',filter:'(?i)(台|TW|Taiwan|Taipei)'},
+  {key:'jp',name:'JP 日本节点',badge:'🇯🇵 日本节点 (自动测速)',filter:'(?i)(日|JP|Japan|Tokyo|Osaka)'},
+  {key:'sg',name:'SG 新加坡节点',badge:'🇸🇬 新加坡节点 (自动测速)',filter:'(?i)(新|SG|Singapore|狮城)'},
+  {key:'us',name:'US 美国节点',badge:'🇺🇸 美国节点 (自动测速)',filter:'(?i)(美|US|United\\s*States|America|Los\\s*Angeles|San\\s*Jose|Seattle)'}
+];
+const DEFAULT_PRESET_RULES=[
+  {key:'ai',name:'AI 人工智能',pill:'🤖 AI (OpenAI/Claude)',desc:'🤖 AI 全家桶 (OpenAI/Claude) → 🇺🇸 美国节点',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-ai-!cn.yaml',ip_url:'',default_region:'us'},
+  {key:'youtube',name:'YouTube 视频',pill:'🎬 YouTube',desc:'🎬 YouTube 视频 → 🇭🇰 香港节点',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/youtube.yaml',ip_url:'',default_region:'hk'},
+  {key:'netflix',name:'Netflix 奈飞',pill:'🍿 Netflix',desc:'🍿 Netflix 奈飞 → 🇸🇬 新加坡节点',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/netflix.yaml',ip_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/netflix.yaml',default_region:'sg'},
+  {key:'telegram',name:'Telegram 电报',pill:'💬 Telegram',desc:'💬 Telegram 电报 → 🇸🇬 新加坡节点',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/telegram.yaml',ip_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/telegram.yaml',default_region:'sg'},
+  {key:'github',name:'GitHub 开发者',pill:'🐙 GitHub',desc:'🐙 GitHub 开发者 → 🚀 默认代理',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/github.yaml',ip_url:'',default_region:'proxy'},
+  {key:'apple',name:'Apple 苹果服务',pill:'🍎 Apple 服务',desc:'🍎 Apple / 微软服务 → DIRECT 直连',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/apple.yaml',ip_url:'',default_region:'direct'},
+  {key:'cn',name:'国内域名与局域网直连',pill:'🏠 国内域名+IP直连',desc:'🏠 国内域名 & 局域网 IP → DIRECT 直连',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/cn.yaml',ip_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/cn.yaml',default_region:'direct'},
+  {key:'adblock',name:'广告与追踪拦截',pill:'🛡️ 广告拦截',desc:'🛡️ 广告拦截 → REJECT',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-ads-all.yaml',ip_url:'',default_region:'reject'}
+];
+let spacePresetsCache={regions:DEFAULT_PRESET_REGIONS,rules:DEFAULT_PRESET_RULES,controllers:{},links_by_space:{}};
+async function refreshSpacePresets(){
+  try{
+    const res=await api('/api/spaces/presets');
+    if(res&&typeof res==='object'){
+      spacePresetsCache={
+        regions:res.regions?.length?res.regions:DEFAULT_PRESET_REGIONS,
+        rules:res.rules?.length?res.rules:DEFAULT_PRESET_RULES,
+        controllers:res.controllers||{},
+        links_by_space:res.links_by_space||{}
+      };
+    }
+  }catch{}
+  return spacePresetsCache;
+}
+async function copyTextSafe(text,okMsg='已复制到剪贴板。'){
+  try{
+    if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);
+    else{
+      const area=document.createElement('textarea');area.value=text;area.style.position='fixed';area.style.opacity='0';
+      document.body.append(area);area.focus();area.select();document.execCommand('copy');area.remove();
+    }
+    toast(okMsg);
+  }catch{
+    toast('复制失败，请手动复制：'+text);
+  }
+}
+async function copySpaceSubscriptionDirect(targetSpaceId){
+  const s=(spaceCatalog?.spaces||[]).find(item=>item.id===targetSpaceId)||activeSpace();
+  if(!s)return;
+  const existing=(spacePresetsCache.links_by_space?.[s.id]||[]).at(-1);
+  if(existing?.url){
+    await copyTextSafe(existing.url,`已复制「${s.name}」的持久订阅链接！`);
+    return;
+  }
+  try{
+    toast(`正在为「${s.name}」生成持久订阅链接…`);
+    const snap=s.id===spaceId?liveWorkspace:await api('/api/workspace',undefined,s.id);
+    const created=await api('/api/workspace/subscriptions',{
+      proxy:s.native?'mihomo':(s.proxy||'mihomo'),
+      base_url:location.origin,
+      rule_address:'original',
+      revision:snap.revision
+    },s.id);
+    spacePresetsCache.links_by_space??={};
+    spacePresetsCache.links_by_space[s.id]=[created];
+    if(page==='spaces')paintSpaceCards();
+    await copyTextSafe(created.url,`已生成并复制「${s.name}」的持久订阅链接！`);
+  }catch(error){
+    toast(error.message);
+  }
+}
+function openClientControllerModal(targetSpaceId){
+  const s=(spaceCatalog?.spaces||[]).find(item=>item.id===targetSpaceId)||activeSpace();
+  if(!s)return;
+  const ctrl=spacePresetsCache.controllers?.[s.id]||{enabled:false,url:'',secret:''};
+  showDialog(`客户端自动热重载 · ${s.name}`,`<form id="client-ctrl-form">
+    <p class="scope-editor-note">${badge('零 Agent 实时推送','accent')} 绑定局域网内客户端（如 OpenWrt / Clash Party / 软路由 Mihomo）的 External Controller 地址后，在网页改规则或用 Hermes 一句话加规则时，YoMesh 会自动调用 <code>PUT /configs?force=true</code> 触发客户端 0 秒热重载。</p>
+    <label class="check-row" style="margin:10px 0"><input type="checkbox" id="cc-enabled" ${ctrl.enabled?'checked':''}>启用保存后自动热重载推送</label>
+    <div class="fields">
+      <label class="field">Mihomo External Controller 地址<input id="cc-url" type="url" placeholder="例如：http://192.168.8.2:9090" value="${esc(ctrl.url||'')}"><small>对应 Mihomo 配置中的 <code>external-controller</code> 地址。</small></label>
+      <label class="field">Controller Secret 密钥（可选）<input id="cc-secret" type="password" placeholder="若未设置 secret 可留空" value="${esc(ctrl.secret||'')}"><small>对应 Mihomo 配置中的 <code>secret</code> 字段。</small></label>
+    </div>
+    ${ctrl.last_status?`<p class="preview-note">上次连接状态：<strong>${esc(ctrl.last_status)}</strong>${ctrl.last_error?' · '+esc(ctrl.last_error):''}</p>`:''}
+    <p id="cc-error" class="error-message" role="alert"></p>
+    <div class="dialog-actions">
+      <button type="button" class="button" id="cc-cancel">取消</button>
+      <button type="submit" class="button primary" id="cc-submit">保存并检测连通性</button>
+    </div>
+  </form>`);
+  $('#cc-cancel').onclick=()=>$('#dialog').close();
+  $('#client-ctrl-form').onsubmit=async e=>{
+    e.preventDefault();
+    const btn=$('#cc-submit');btn.disabled=true;$('#cc-error').textContent='';
+    try{
+      const enabled=$('#cc-enabled').checked,url=$('#cc-url').value.trim(),secret=$('#cc-secret').value.trim();
+      if(enabled&&!url)throw Error('启用自动热重载时，请填写客户端 Controller 地址（如 http://192.168.8.2:9090）。');
+      const saved=await api('/api/spaces/client-controller',{space_id:s.id,enabled,url,secret});
+      spacePresetsCache.controllers??={};
+      spacePresetsCache.controllers[s.id]=saved;
+      $('#dialog').close();
+      if(page==='spaces')paintSpaceCards();
+      toast(saved.enabled?(saved.last_status==='connected'?'已连接客户端控制器！今后改规则将自动热重载。':`控制器设置已保存（探活结果：${saved.last_error||saved.last_status}）`):'已关闭此方案的客户端自动重载。');
+    }catch(error){
+      $('#cc-error').textContent=error.message;
+      btn.disabled=false;
+    }
+  };
+}
+async function openQuickCreateSpace(){
+  try{await saveSpaceDrafts();await refreshSpaceCatalog()}catch(error){toast(error.message);return}
+  const regions=spacePresetsCache.regions||DEFAULT_PRESET_REGIONS;
+  const rules=spacePresetsCache.rules||DEFAULT_PRESET_RULES;
+  showDialog('⚡ 快速创建方案（填订阅一键成套）',`<form id="quick-create-form">
+    <p class="scope-editor-note">${badge('47 步缩减至 3 步','accent')} 粘贴机场订阅链接，一键自动生成「港/台/日/新/美」测速节点组、8 大常用分流规则与持久订阅链接。</p>
+    <section class="space-form-section" style="margin-bottom:12px">
+      <h3>① 方案名称与机场节点订阅</h3>
+      <div class="fields">
+        <label class="field">方案名称<input id="qc-name" required maxlength="80" value="主力全套分流方案" placeholder="例如：主力全套分流方案"></label>
+        <label class="field">输出内核格式<select id="qc-proxy">
+          <option value="mihomo">Mihomo · YAML（Clash.Meta / OpenWrt / Clash Party）</option>
+          <option value="sing-box">sing-box · JSON</option>
+        </select></label>
+      </div>
+      <label class="field" style="margin-top:8px">机场节点订阅地址（URL，支持粘贴多个，每行一条；也可留空先建框架）<textarea id="qc-urls" class="mono" rows="2" spellcheck="false" placeholder="https://example.com/api/v1/client/subscribe?token=..."></textarea></label>
+    </section>
+    <section class="space-form-section" style="margin-bottom:12px">
+      <div class="section-title"><h3>② 自动生成的节点分组（默认全选，按正则自动归类节点并测速）</h3></div>
+      <div class="preset-pill-grid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+        <label class="check-row preset-pill"><input type="checkbox" checked disabled>🚀 默认代理（汇总选择组）</label>
+        ${regions.map(r=>`<label class="check-row preset-pill"><input type="checkbox" data-qc-region="${esc(r.key)}" checked>${esc(r.badge||r.name)}</label>`).join('')}
+      </div>
+    </section>
+    <section class="space-form-section" style="margin-bottom:12px">
+      <div class="section-title"><h3>③ 自动生成的分流规则包（默认全选，自动绑定对应地区组与直连/拦截）</h3></div>
+      <div class="preset-pill-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin-top:8px">
+        ${rules.map(r=>`<label class="check-row preset-pill"><input type="checkbox" data-qc-rule="${esc(r.key)}" checked>${esc(r.desc||r.name)}</label>`).join('')}
+      </div>
+    </section>
+    <p id="qc-error" class="error-message" role="alert"></p>
+    <div class="dialog-actions">
+      <button type="button" class="button" id="qc-cancel">取消</button>
+      <button type="submit" class="button primary" id="qc-submit">⚡ 一键生成方案并复制订阅链接</button>
+    </div>
+  </form>`);
+  $('#qc-cancel').onclick=()=>$('#dialog').close();
+  $('#quick-create-form').onsubmit=async e=>{
+    e.preventDefault();
+    const btn=$('#qc-submit');btn.disabled=true;btn.textContent='正在拉取订阅并构建方案…';$('#qc-error').textContent='';
+    try{
+      const chosenRegions=$$('[data-qc-region]:checked').map(el=>el.dataset.qcRegion);
+      const chosenRules=$$('[data-qc-rule]:checked').map(el=>el.dataset.qcRule);
+      const res=await api('/api/spaces/quick-create',{
+        name:$('#qc-name').value.trim()||'主力全套分流方案',
+        proxy:$('#qc-proxy').value,
+        subscription_url:$('#qc-urls').value.trim(),
+        subscription_name:'主力机场订阅',
+        regions:chosenRegions,
+        rules:chosenRules,
+        base_url:location.origin
+      });
+      spaceCatalog=res.spaces;
+      if(res.subscription?.url){
+        spacePresetsCache.links_by_space??={};
+        spacePresetsCache.links_by_space[res.id]=[res.subscription];
+        await copyTextSafe(res.subscription.url,'');
+      }
+      $('#dialog').close();
+      await switchSpace(res.id);
+      await refreshSpacePresets();
+      if(page==='spaces')paintSpaceCards();
+      const s=res.summary||{};
+      toast(`⚡ 已生成方案（${s.nodes||0} 节点 / ${s.groups||0} 分组 / ${s.policies||0} 规则）${res.subscription?.url?'，持久订阅链接已自动复制！':''}`);
+    }catch(error){
+      $('#qc-error').textContent=error.message;
+      btn.disabled=false;
+      btn.textContent='⚡ 一键生成方案并复制订阅链接';
+    }
+  };
+}
 let hermesFreshToken=null;
 async function renderHermesPage(){
   $('#content').innerHTML='<div class="panel"><p class="preview-note">正在读取 Hermes 接入状态…</p></div>';
@@ -95,14 +272,15 @@ async function renderHermesPage(){
     const baseUrl=location.origin;
     const tokenDisplay=hermesFreshToken||'<点击上方按钮生成密钥后自动填入>';
     const oneLineCmd=`curl -fsSL "${baseUrl}/api/setup/hermes_installer.py" | YOMESH_URL="${baseUrl}" YOMESH_TOKEN="${tokenDisplay}" python3 -`;
+    const mcpEndpoint=`${baseUrl}/mcp?token=${tokenDisplay}`;
     const manualYaml=`mcp_servers:\n  yomesh:\n    command: python3\n    args:\n      - /root/.local/share/yomesh/yomesh_hermes_mcp.py\n      - --config\n      - /root/.config/yomesh/hermes.json\n    enabled: true`;
     $('#content').innerHTML=`<div id="hermes-integration-panel" style="max-width:860px">
       <div class="panel" style="margin-bottom:16px">
         <div class="section-title">
-          <h3>第 1 步：生成 Hermes 专属接入密钥</h3>
+          <h3>第 1 步：生成 Hermes / MCP 专属接入密钥</h3>
           ${badge(status.configured?'已启用':'未启用',status.configured?'accent':'')}
         </div>
-        <p class="preview-note" style="margin-top:6px">连接 Hermes 后，你可以直接用自然语言查域名分流原因、一句话向 YoMesh 添加规则、测速节点或获取订阅链接。无需配置 SSH 免密，密钥随时可一键吊销。</p>
+        <p class="preview-note" style="margin-top:6px">连接后，你可以直接用自然语言查域名分流原因、一句话向 YoMesh 置顶添加规则（支持批量域名与模糊节点组名，如“美国”自动匹配“US 美国节点”）、测速节点或获取订阅链接；若绑定了客户端控制器还会 0 秒触发热重载。</p>
         <p class="preview-note" style="margin-top:6px">${status.configured?`当前生效密钥前缀：<code>${esc(status.prefix||'ymh_')}***</code>${status.last_used_at?' · 最近调用：'+esc(serverTime(status.last_used_at)):''}`:'尚未生成接入密钥，请点击下方按钮一键生成。'}</p>
         <div class="filter-row" style="margin-top:12px">
           <button type="button" class="button primary" id="hm-rotate">${status.configured?'重新生成一键接入命令（旧密钥立即失效）':'一键生成密钥 & 安装命令'}</button>
@@ -111,7 +289,7 @@ async function renderHermesPage(){
       </div>
       <div class="panel" style="margin-bottom:16px">
         <div class="section-title">
-          <h3>第 2 步：在运行 Hermes 的机器终端执行（一行自动配好）</h3>
+          <h3>第 2 步（方式 A）：在运行 Hermes 的机器终端执行（一行自动配好）</h3>
           ${hermesFreshToken?badge('已填入最新密钥 · 请复制执行','accent'):badge('等待生成新密钥')}
         </div>
         <p class="preview-note" style="margin-top:6px">${hermesFreshToken?'复制下方命令到运行 Hermes 的服务器终端粘贴执行，将自动下载 MCP 脚本、写入 ~/.hermes/config.yaml 并运行 hermes mcp test yomesh 连通性自检：':'请先点击第 1 步中的「一键生成密钥 & 安装命令」，下方命令会自动填入一次性完整密钥：'}</p>
@@ -120,14 +298,25 @@ async function renderHermesPage(){
           <button type="button" class="button ${hermesFreshToken?'primary':''}" id="hm-copy-cmd" ${hermesFreshToken?'':'disabled'}>复制一键安装命令</button>
         </div>
       </div>
+      <div class="panel" style="margin-bottom:16px">
+        <div class="section-title">
+          <h3>第 2 步（方式 B）：Streamable HTTP 标准 MCP 地址（免装脚本直连）</h3>
+          ${badge('POST /mcp · JSON-RPC 2.0','accent')}
+        </div>
+        <p class="preview-note" style="margin-top:6px">支持 Streamable HTTP 的 MCP 客户端（如 Claude Code、Cursor、Cherry Studio 等）无需安装本地脚本，直接填入以下 HTTP MCP 端点即可：</p>
+        <pre class="code-preview mono" id="hm-mcp-url" style="white-space:pre-wrap;word-break:break-all;margin:10px 0">${esc(mcpEndpoint)}</pre>
+        <div class="filter-row">
+          <button type="button" class="button" id="hm-copy-mcp" ${hermesFreshToken?'':'disabled'}>复制 HTTP MCP 地址</button>
+        </div>
+      </div>
       <div class="panel">
         <div class="section-title">
           <h3>支持的自然语言指令与 MCP 工具</h3>
-          ${badge('5 个内置工具')}
+          ${badge('5 个内置工具 · 规则自动置顶')}
         </div>
         <ul style="margin:8px 0 12px 18px;font-size:13px;line-height:1.8">
           <li><strong>查分流原因</strong>（<code>yomesh_diagnose_domain</code>）：“帮我查一下 <code>api.anthropic.com</code> 在 YoMesh 里命中了哪条规则、走哪个出口？”</li>
-          <li><strong>一句话加规则</strong>（<code>yomesh_add_rule</code>）：“把 <code>claude.ai</code> 加到 AI 节点组”、“把 <code>192.168.8.0/24</code> 设为直连 DIRECT”</li>
+          <li><strong>一句话置顶加规则</strong>（<code>yomesh_add_rule</code>）：“把 <code>claude.ai, cursor.sh</code> 加到美国节点”、“把 <code>192.168.8.0/24</code> 设为直连 DIRECT”（新规则自动置顶到第 1 条，并支持模糊匹配节点组）</li>
           <li><strong>节点延迟测速</strong>（<code>yomesh_test_nodes</code>）：“帮我测速一下当前配置空间的节点，看看哪个香港节点延迟最低”</li>
           <li><strong>获取订阅链接</strong>（<code>yomesh_subscription_link</code>）：“把当前空间的 Mihomo 订阅链接发给我，我要填到 LocalDNS”</li>
           <li><strong>查看配置空间</strong>（<code>yomesh_list_spaces</code>）：“列出我当前在 YoMesh 里的所有配置空间和节点统计”</li>
@@ -144,7 +333,7 @@ async function renderHermesPage(){
       try{
         const res=await api('/api/integrations/hermes/rotate',{});
         status=res;hermesFreshToken=res.token;loadError='';paint();
-        toast('已生成新的 Hermes 一键安装命令。');
+        toast('已生成新的 Hermes 一键安装命令与 HTTP MCP 地址。');
       }catch(err){$('#hm-error').textContent=err.message;e.target.disabled=false}
     };
     if($('#hm-revoke'))$('#hm-revoke').onclick=async e=>{
@@ -155,14 +344,8 @@ async function renderHermesPage(){
         toast('已停用 Hermes 接入密钥。');
       }catch(err){$('#hm-error').textContent=err.message;e.target.disabled=false}
     };
-    if($('#hm-copy-cmd'))$('#hm-copy-cmd').onclick=async()=>{
-      try{
-        await navigator.clipboard.writeText(oneLineCmd);
-        toast('一键安装命令已复制，去 Hermes 终端粘贴执行即可。');
-      }catch{
-        toast('请手动选中上方命令复制。');
-      }
-    };
+    if($('#hm-copy-cmd'))$('#hm-copy-cmd').onclick=()=>copyTextSafe(oneLineCmd,'一键安装命令已复制，去 Hermes 终端粘贴执行即可。');
+    if($('#hm-copy-mcp'))$('#hm-copy-mcp').onclick=()=>copyTextSafe(mcpEndpoint,'Streamable HTTP MCP 地址已复制。');
   };
   paint();
 }
@@ -170,18 +353,38 @@ function openHermesIntegration(){
   if(location.hash==='#hermes')renderHermesPage();
   else location.hash='hermes';
 }
+let spacePresetsLoadedOnce=false;
 function paintSpaceCards(){
+  if(!spacePresetsLoadedOnce){
+    spacePresetsLoadedOnce=true;
+    refreshSpacePresets().then(()=>{if(page==='spaces')paintSpaceCards()});
+  }
   const entries=spaceCatalog?.spaces||[];
-  $('#content').innerHTML=`<div class="configuration-overview"><div><h2>代理配置与 LocalDNS 联动</h2><p>导入现有 Mihomo YAML / sing-box JSON 或添加订阅节点；生成订阅链接填入 LocalDNS 的代理管理器即可自动拉取更新。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button primary" id="space-import-config">导入现有配置</button><button type="button" class="button" id="space-open-subscription">获取订阅链接（联动 LocalDNS）</button></div></div><div><h2>Hermes 智能助手</h2><p>一行命令自动配好 <code>~/.hermes/config.yaml</code>，直接用自然语言查域名分流、加规则、测速节点。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button" id="space-open-hermes">配置 Hermes 接入</button></div></div></div><div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{
+  $('#content').innerHTML=`<div class="configuration-overview"><div><h2>代理配置与一键成套向导</h2><p>填一条机场订阅即可 3 步自动生成「港/台/日/新/美」分组与 8 大分流规则；也可直接导入现有 Mihomo YAML / sing-box JSON 配置。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button primary" id="space-quick-create">⚡ 快速创建方案（填订阅一键成套）</button><button type="button" class="button" id="space-import-config">导入现有配置</button><button type="button" class="button" id="space-open-subscription">高级订阅链接设置</button></div></div><div><h2>Hermes 智能助手 & HTTP MCP</h2><p>一行命令配好 Hermes 或直连 <code>/mcp</code> 接口，用自然语言查分流、一句话置顶加规则并自动热重载客户端。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button" id="space-open-hermes">配置 Hermes / MCP 接入</button></div></div></div><div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{
     const current=s.id===spaceId,counts=s.counts||{},g=s.generation||{},issues=g.excluded_policies?.length||0;
+    const savedLink=(spacePresetsCache.links_by_space?.[s.id]||[]).at(-1);
+    const linkPreview=savedLink?.url||`${location.origin}/s/<点击右侧按钮一键生成并复制>/${s.proxy==='sing-box'&&!s.native?'sing-box.json':'mihomo.yaml'}`;
+    const ctrl=spacePresetsCache.controllers?.[s.id];
+    const ctrlConnected=ctrl?.enabled&&ctrl?.url;
     const actions=current
-      ?`<button class="button primary" data-space-export="${esc(s.id)}">${actionIcon('download')}导出代理</button><button class="button" data-space-subscription="${esc(s.id)}">订阅链接</button><button class="button" data-space-configure="${esc(s.id)}">去配置规则</button>${resourceMenu(s.name,`<button data-space-edit="${esc(s.id)}">${s.native?'修改名称与说明':'编辑方案选用'}</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" disabled>${s.id==='default'?'默认方案保留':'切换后可删除'}</button>`)}`
+      ?`<button class="button primary" data-space-configure="${esc(s.id)}">去配置规则</button><button class="button" data-space-export="${esc(s.id)}">${actionIcon('download')}导出配置包</button><button class="button" data-space-subscription="${esc(s.id)}">链接高级设置</button>${resourceMenu(s.name,`<button data-space-edit="${esc(s.id)}">${s.native?'修改名称与说明':'编辑方案选用'}</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" disabled>${s.id==='default'?'默认方案保留':'切换后可删除'}</button>`)}`
       :`<button class="button primary" data-space-use="${esc(s.id)}">切换到此方案</button><button class="button" data-space-edit="${esc(s.id)}">${s.native?'改名 / 说明':'编辑选用'}</button><button class="button" data-space-copy="${esc(s.id)}">复制为新方案</button>${resourceMenu(s.name,`<button data-space-subscription="${esc(s.id)}">切换并查看订阅链接</button><button data-space-export="${esc(s.id)}">切换并导出代理</button><button class="danger-action" data-space-delete="${esc(s.id)}" ${s.id==='default'?'disabled':''}>${s.id==='default'?'默认方案保留':'删除此方案'}</button>`)}`;
-    return `<article class="panel space-card ${current?'selected':''}" aria-label="${esc(s.name)}配置空间"><div class="space-card-heading"><div><h2>${esc(s.name)}</h2><p>${s.native?'Mihomo YAML':s.proxy==='sing-box'?'sing-box JSON':'Mihomo YAML'} · ${s.native?'原生引用与缓存':{inline:'内联规则',local:'本地文件引用',remote:'远程订阅引用'}[s.rule_output]||'内联规则'}</p></div>${current?badge('当前使用中','accent'):badge('未激活')}</div><p class="space-description">${esc(s.description||'节点组 + 规则 + 分流策略的生成方案')}</p><div class="space-counts"><span><b>${counts.groups||0}</b> 节点组</span><span><b>${counts.library||0}</b> 规则</span><span><b>${counts.policies||0}</b> 策略</span></div><p class="space-readiness ${g.error?'error-message':'generation-ready'}">${g.error?esc(g.error):g.valid?'代理选用检查通过':'等待代理检查'}${issues?` · 跳过 ${issues} 条策略`:''}</p><div class="space-card-actions">${actions}</div></article>`;
+    return `<article class="panel space-card ${current?'selected':''}" aria-label="${esc(s.name)}配置空间"><div class="space-card-heading"><div><h2>${esc(s.name)}</h2><p>${s.native?'Mihomo YAML':s.proxy==='sing-box'?'sing-box JSON':'Mihomo YAML'} · ${s.native?'原生引用与缓存':{inline:'内联规则',local:'本地文件引用',remote:'远程订阅引用'}[s.rule_output]||'内联规则'}</p></div>${current?badge('当前使用中','accent'):badge('未激活')}</div><p class="space-description">${esc(s.description||'节点组 + 规则 + 分流策略的生成方案')}</p><div class="space-counts"><span><b>${counts.groups||0}</b> 节点组</span><span><b>${counts.library||0}</b> 规则</span><span><b>${counts.policies||0}</b> 策略</span></div><div class="space-inline-sub-box"><div class="space-inline-sub-label"><span>🔗 专属持久订阅链接（填入客户端 / LocalDNS 自动拉取更新）</span></div><div class="space-inline-sub-row"><input type="text" class="mono" readonly value="${esc(linkPreview)}" aria-label="${esc(s.name)}订阅链接"><button type="button" class="button primary" data-space-copy-sub="${esc(s.id)}">📋 直接复制</button></div></div><div class="space-inline-ctrl-bar"><div class="space-inline-ctrl-info"><span>🔄 客户端自动重载：</span>${ctrlConnected?`<strong style="color:#34d399">● 已绑定 (${esc(ctrl.url)}) · 改规则 0 秒热重载</strong>`:`<span>未绑定（可选填 Mihomo Controller，改规则自动热重载）</span>`}</div><div class="filter-row" style="gap:8px">${ctrlConnected?`<button type="button" class="text-button" data-space-reload-now="${esc(s.id)}">立即重载</button>`:''}<button type="button" class="text-button" data-space-controller="${esc(s.id)}">${ctrlConnected?'修改控制器':'绑定客户端控制器'}</button></div></div><p class="space-readiness ${g.error?'error-message':'generation-ready'}">${g.error?esc(g.error):g.valid?'代理选用检查通过':'等待代理检查'}${issues?` · 跳过 ${issues} 条策略`:''}</p><div class="space-card-actions">${actions}</div></article>`;
   }).join('')}</div><p class="preview-note">“当前使用中”表示左侧导航正在编辑该方案。切换方案或导出前都会自动执行原生内核校验。</p>`;
+  $('#space-quick-create').onclick=openQuickCreateSpace;
   $('#space-import-config').onclick=openConfigImport;
   $('#space-open-subscription').onclick=openSubscriptionLink;
   $('#space-open-hermes').onclick=openHermesIntegration;
+  $$('[data-space-copy-sub]').forEach(b=>b.onclick=()=>copySpaceSubscriptionDirect(b.dataset.spaceCopySub));
+  $$('[data-space-controller]').forEach(b=>b.onclick=()=>openClientControllerModal(b.dataset.spaceController));
+  $$('[data-space-reload-now]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true;
+    try{
+      const res=await api('/api/spaces/client-controller',{action:'reload',space_id:b.dataset.spaceReloadNow});
+      toast(res.reloaded?'已触发客户端 0 秒热重载！':`热重载未成功：${res.error||res.reason||'请检查客户端 Controller 地址'}`);
+    }catch(err){toast(err.message)}
+    finally{b.disabled=false}
+  });
   $$('[data-space-configure]').forEach(b=>b.onclick=()=>{location.hash='library'});
   $$('[data-space-use]').forEach(b=>b.onclick=()=>switchSpace(b.dataset.spaceUse).catch(error=>toast(error.message)));
   $$('[data-space-edit]').forEach(b=>b.onclick=()=>editSpace(b.dataset.spaceEdit));

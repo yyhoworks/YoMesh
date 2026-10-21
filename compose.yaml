@@ -1,6 +1,6 @@
 services:
   yomesh:
-    image: yomesh:0.17.1
+    image: yomesh:0.17.2
     build:
       context: .
     container_name: yomesh

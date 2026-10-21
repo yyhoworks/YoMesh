@@ -14,3 +14,15 @@
 @media(max-width:780px){.configuration-overview{grid-template-columns:1fr;gap:24px}.configuration-overview .text-button{min-height:44px}}
 .sidebar button.nav-item{width:100%;border:0;background:transparent;text-align:left;font:inherit;color:var(--muted);cursor:pointer}
 .sidebar button.nav-item:hover{background:var(--hover);color:var(--ink)}
+.space-inline-sub-box{background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.22);border-radius:10px;padding:10px 12px;margin:0 0 10px}
+.space-inline-sub-label{font-size:11.5px;color:#34d399;font-weight:600;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
+.space-inline-sub-row{display:flex;align-items:center;gap:8px}
+.space-inline-sub-row input{flex:1;min-width:0;min-height:34px;font-size:12px;padding:4px 10px}
+.space-inline-ctrl-bar{background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:8px 12px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.space-inline-ctrl-info{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.preset-pill-box{background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.22);border-radius:10px;padding:10px 12px;margin:0 0 12px}
+.preset-pill-title{font-size:12px;font-weight:600;color:#34d399;margin:0 0 8px}
+.preset-pill-list{display:flex;flex-wrap:wrap;gap:6px}
+.preset-pill{background:var(--hover);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:12px;color:var(--ink);cursor:pointer;transition:border-color .15s,background .15s}
+.preset-pill:hover{border-color:var(--accent);background:rgba(99,102,241,0.12)}
+
