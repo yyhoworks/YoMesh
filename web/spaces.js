@@ -3,7 +3,8 @@
 Object.assign(pages, {
   spaces:['配置空间','为手机、电脑或网关保存独立配置，按需导入、复制、调整和生成。','新建配置空间'],
   inbounds:['入站','管理接收连接的协议、监听端口与连接参数。','添加入站'],
-  dns:['MosDNS','设置当前配置空间的 DNS 上游、监听与分流解析。','']
+  dns:['MosDNS','设置当前配置空间的 DNS 上游、监听与分流解析。',''],
+  hermes:['Hermes 接入','一行命令将 YoMesh 接入 Hermes Agent，用自然语言查分流、加规则、测速节点与获取订阅链接。','']
 });
 pages.library[0]='规则';pages.library[2]='添加规则';
 pages.library[1]='全部规则统一管理。每条规则选择匹配器或订阅，在分流策略中按需使用。';
@@ -24,9 +25,8 @@ let spaceSwitchBusy=false, spaceListSerial=0,moreNavigationOpen=false;
 nav=function(){
   const countFor=p=>p==='spaces'?spaceCatalog?.spaces?.length:Array.isArray(data[p])?data[p].length:undefined;
   const link=p=>{const c=countFor(p);return `<a href="#${p}" class="nav-item ${page===p?'active':''}" ${page===p?'aria-current="page"':''}>${icon(p)}<span>${pages[p][0]}</span>${c!==undefined?`<span class="nav-count">${c}</span>`:''}</a>`};
-  $('#navigation').innerHTML=`${link('spaces')}<div class="nav-group">节点资源</div>${['sources','nodes'].map(link).join('')}<div class="nav-group">代理设置</div>${['groups','library','inbounds'].map(link).join('')}<button type="button" class="nav-item" id="nav-base-config" ${$('#base-config')?.disabled?'disabled':''}>${icon('settings')}<span>基础设置</span></button><div class="nav-group">智能联动</div><button type="button" class="nav-item" id="nav-hermes-config">${icon('hermes')}<span>Hermes 接入</span></button>`;
+  $('#navigation').innerHTML=`${link('spaces')}<div class="nav-group">节点资源</div>${['sources','nodes'].map(link).join('')}<div class="nav-group">代理设置</div>${['groups','library','inbounds'].map(link).join('')}<button type="button" class="nav-item" id="nav-base-config" ${$('#base-config')?.disabled?'disabled':''}>${icon('settings')}<span>基础设置</span></button><div class="nav-group">智能联动</div>${link('hermes')}`;
   $('#nav-base-config').onclick=()=>{if(typeof setNavigation==='function')setNavigation(false);$('#base-config').click()};
-  $('#nav-hermes-config').onclick=()=>{if(typeof setNavigation==='function')setNavigation(false);if(typeof openHermesIntegration==='function')openHermesIntegration()};
 };
 function paintSpaceSelect(){
   $('#space-select').innerHTML=(spaceCatalog?.spaces||[]).map(s=>`<option value="${esc(s.id)}" ${s.id===spaceId?'selected':''}>${esc(s.name)}</option>`).join('');
@@ -34,11 +34,13 @@ function paintSpaceSelect(){
 const renderWithSpaces=render;
 render=function(){
   policyView='rules';paintSpaceSelect();
-  if(!['spaces','inbounds','dns'].includes(page)){renderWithSpaces();return}
+  if(!['spaces','inbounds','dns','hermes'].includes(page)){renderWithSpaces();return}
   nav();$('#breadcrumb').textContent=pages[page][0];$('#page-title').textContent=pages[page][0];$('#page-description').textContent=pages[page][1];
-  $('#create').hidden=page==='dns';$('#create').innerHTML=icon('plus')+pages[page][2];
+  $('#create').hidden=['dns','hermes'].includes(page);$('#create').innerHTML=icon('plus')+pages[page][2];
   if(page==='spaces'){renderSpaces();return}
-  if(page==='inbounds')renderInbounds();else renderDns();
+  if(page==='inbounds'){renderInbounds();return}
+  if(page==='hermes'){if(typeof renderHermesPage==='function')renderHermesPage();return}
+  renderDns();
 };
 // These panels are now independent navigation destinations.
 planToolbar=function(){

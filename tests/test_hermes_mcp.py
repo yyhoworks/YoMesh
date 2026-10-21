@@ -59,10 +59,19 @@ class HermesMcpTests(unittest.TestCase):
             return err.code, json.loads(err.read().decode("utf-8"))
 
     def test_hermes_token_lifecycle_and_mcp_endpoints(self):
-        # 1. Initial status is unconfigured
+        # 1. Legacy v0.16.x format in data/hermes-access.json is migrated cleanly
+        (self.root / "data").mkdir(parents=True, exist_ok=True)
+        (self.root / "data/hermes-access.json").write_text(
+            json.dumps({
+                "format": "yomesh-hermes-v1",
+                "token_sha256": "a" * 64,
+                "created": 1700000000,
+            }),
+            encoding="utf-8",
+        )
         status, info = self.api("/api/integrations/hermes")
-        self.assertEqual(status, 200)
-        self.assertFalse(info["configured"])
+        self.assertEqual(status, 200, info)
+        self.assertTrue(info["configured"])
 
         # 2. Rotate generates a ymh_ token
         status, rotated = self.api("/api/integrations/hermes/rotate", {})

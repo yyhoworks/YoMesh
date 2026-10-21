@@ -86,68 +86,72 @@ async function openConfigImport(){
     }
   };
 }
-async function openHermesIntegration(){
-  let status;
-  try{status=await api('/api/integrations/hermes')}catch(error){toast(error.message);return}
-  let freshToken=null;
-  const renderModal=()=>{
+let hermesFreshToken=null;
+async function renderHermesPage(){
+  $('#content').innerHTML='<div class="panel"><p class="preview-note">正在读取 Hermes 接入状态…</p></div>';
+  let status={configured:false,prefix:null,created_at:null,last_used_at:null},loadError='';
+  try{status=await api('/api/integrations/hermes')}catch(error){loadError=error.message}
+  const paint=()=>{
     const baseUrl=location.origin;
-    const tokenDisplay=freshToken||'<生成后自动填入>';
+    const tokenDisplay=hermesFreshToken||'<点击上方按钮生成密钥后自动填入>';
     const oneLineCmd=`curl -fsSL "${baseUrl}/api/setup/hermes_installer.py" | YOMESH_URL="${baseUrl}" YOMESH_TOKEN="${tokenDisplay}" python3 -`;
     const manualYaml=`mcp_servers:\n  yomesh:\n    command: python3\n    args:\n      - /root/.local/share/yomesh/yomesh_hermes_mcp.py\n      - --config\n      - /root/.config/yomesh/hermes.json\n    enabled: true`;
-    showDialog('Hermes 智能助手接入',`<div id="hermes-integration-panel">
-      <p class="scope-editor-note">${badge(status.configured?'已启用':'未启用',status.configured?'accent':'')} 连接 Hermes 后，你可以直接用自然语言查域名分流原因、一句话添加规则、测速节点或获取订阅链接。</p>
-      <div class="panel" style="margin-bottom:14px">
+    $('#content').innerHTML=`<div id="hermes-integration-panel" style="max-width:860px">
+      <div class="panel" style="margin-bottom:16px">
         <div class="section-title">
-          <h3>第 1 步：生成接入命令</h3>
-          <span>${status.configured?`当前密钥前缀：<code>${esc(status.prefix||'ymh_')}***</code>`:'尚未生成接入密钥'}</span>
+          <h3>第 1 步：生成 Hermes 专属接入密钥</h3>
+          ${badge(status.configured?'已启用':'未启用',status.configured?'accent':'')}
         </div>
-        <p class="preview-note">${status.last_used_at?'最近调用时间：'+esc(serverTime(status.last_used_at)):'点击下方按钮生成一键安装命令（旧密钥会立即失效）。'}</p>
-        <div class="filter-row" style="margin-top:10px">
-          <button type="button" class="button primary" id="hm-rotate">${status.configured?'重新生成一键接入命令':'生成一键接入命令'}</button>
+        <p class="preview-note" style="margin-top:6px">连接 Hermes 后，你可以直接用自然语言查域名分流原因、一句话向 YoMesh 添加规则、测速节点或获取订阅链接。无需配置 SSH 免密，密钥随时可一键吊销。</p>
+        <p class="preview-note" style="margin-top:6px">${status.configured?`当前生效密钥前缀：<code>${esc(status.prefix||'ymh_')}***</code>${status.last_used_at?' · 最近调用：'+esc(serverTime(status.last_used_at)):''}`:'尚未生成接入密钥，请点击下方按钮一键生成。'}</p>
+        <div class="filter-row" style="margin-top:12px">
+          <button type="button" class="button primary" id="hm-rotate">${status.configured?'重新生成一键接入命令（旧密钥立即失效）':'一键生成密钥 & 安装命令'}</button>
           ${status.configured?'<button type="button" class="button danger-button" id="hm-revoke">停用 Hermes 接入</button>':''}
         </div>
       </div>
-      <div class="panel" style="margin-bottom:14px">
+      <div class="panel" style="margin-bottom:16px">
         <div class="section-title">
-          <h3>第 2 步：在 Hermes 所在机器执行（一行搞定）</h3>
-          ${freshToken?badge('含最新密钥 · 请立即复制','accent'):''}
+          <h3>第 2 步：在运行 Hermes 的机器终端执行（一行自动配好）</h3>
+          ${hermesFreshToken?badge('已填入最新密钥 · 请复制执行','accent'):badge('等待生成新密钥')}
         </div>
-        <p class="preview-note">${freshToken?'复制下方命令到运行 Hermes 的服务器终端执行，将自动下载桥接脚本、写入 ~/.hermes/config.yaml 并运行连通性自检：':'请先点击上方「生成一键接入命令」，这里会自动填入包含完整密钥的一行安装命令：'}</p>
-        <pre class="code-preview mono" id="hm-cmd" style="white-space:pre-wrap;word-break:break-all;margin:8px 0">${esc(oneLineCmd)}</pre>
+        <p class="preview-note" style="margin-top:6px">${hermesFreshToken?'复制下方命令到运行 Hermes 的服务器终端粘贴执行，将自动下载 MCP 脚本、写入 ~/.hermes/config.yaml 并运行 hermes mcp test yomesh 连通性自检：':'请先点击第 1 步中的「一键生成密钥 & 安装命令」，下方命令会自动填入一次性完整密钥：'}</p>
+        <pre class="code-preview mono" id="hm-cmd" style="white-space:pre-wrap;word-break:break-all;margin:10px 0">${esc(oneLineCmd)}</pre>
         <div class="filter-row">
-          <button type="button" class="button ${freshToken?'primary':''}" id="hm-copy-cmd" ${freshToken?'':'disabled'}>复制一键安装命令</button>
+          <button type="button" class="button ${hermesFreshToken?'primary':''}" id="hm-copy-cmd" ${hermesFreshToken?'':'disabled'}>复制一键安装命令</button>
         </div>
-        <details class="advanced-options" style="margin-top:12px">
-          <summary>查看手动配置 ~/.hermes/config.yaml 与支持的 AI 指令</summary>
-          <p class="preview-note" style="margin-top:8px">一键命令会自动写入以下配置到 <code>~/.hermes/config.yaml</code>：</p>
-          <pre class="code-preview mono">${esc(manualYaml)}</pre>
-          <p class="preview-note" style="margin-top:8px">配置完成后，你可以直接对 Hermes 说：</p>
-          <ul style="margin:6px 0 0 18px;font-size:13px;line-height:1.7">
-            <li>“帮我查一下 <code>claude.ai</code> 在 YoMesh 里走哪个节点组？”（<code>yomesh_diagnose_domain</code>）</li>
-            <li>“把 <code>openai.com</code> 加到 AI 节点组”（<code>yomesh_add_rule</code>）</li>
-            <li>“帮我测速一下当前空间的节点延迟”（<code>yomesh_test_nodes</code>）</li>
-            <li>“把当前空间的 Mihomo 订阅链接发给我”（<code>yomesh_subscription_link</code>）</li>
-          </ul>
+      </div>
+      <div class="panel">
+        <div class="section-title">
+          <h3>支持的自然语言指令与 MCP 工具</h3>
+          ${badge('5 个内置工具')}
+        </div>
+        <ul style="margin:8px 0 12px 18px;font-size:13px;line-height:1.8">
+          <li><strong>查分流原因</strong>（<code>yomesh_diagnose_domain</code>）：“帮我查一下 <code>api.anthropic.com</code> 在 YoMesh 里命中了哪条规则、走哪个出口？”</li>
+          <li><strong>一句话加规则</strong>（<code>yomesh_add_rule</code>）：“把 <code>claude.ai</code> 加到 AI 节点组”、“把 <code>192.168.8.0/24</code> 设为直连 DIRECT”</li>
+          <li><strong>节点延迟测速</strong>（<code>yomesh_test_nodes</code>）：“帮我测速一下当前配置空间的节点，看看哪个香港节点延迟最低”</li>
+          <li><strong>获取订阅链接</strong>（<code>yomesh_subscription_link</code>）：“把当前空间的 Mihomo 订阅链接发给我，我要填到 LocalDNS”</li>
+          <li><strong>查看配置空间</strong>（<code>yomesh_list_spaces</code>）：“列出我当前在 YoMesh 里的所有配置空间和节点统计”</li>
+        </ul>
+        <details class="advanced-options">
+          <summary>查看 ~/.hermes/config.yaml 自动写入结构</summary>
+          <pre class="code-preview mono" style="margin-top:8px">${esc(manualYaml)}</pre>
         </details>
       </div>
-      <p id="hm-error" class="error-message" role="alert"></p>
-      <div class="dialog-actions"><button type="button" class="button" id="hm-close">关闭</button></div>
-    </div>`);
-    $('#hm-close').onclick=()=>$('#dialog').close();
+      <p id="hm-error" class="error-message" role="alert">${esc(loadError)}</p>
+    </div>`;
     $('#hm-rotate').onclick=async e=>{
       e.target.disabled=true;
       try{
         const res=await api('/api/integrations/hermes/rotate',{});
-        status=res;freshToken=res.token;renderModal();
-        toast('已生成新的 Hermes 一键接入命令。');
+        status=res;hermesFreshToken=res.token;loadError='';paint();
+        toast('已生成新的 Hermes 一键安装命令。');
       }catch(err){$('#hm-error').textContent=err.message;e.target.disabled=false}
     };
     if($('#hm-revoke'))$('#hm-revoke').onclick=async e=>{
       e.target.disabled=true;
       try{
         status=await api('/api/integrations/hermes/revoke',{});
-        freshToken=null;renderModal();
+        hermesFreshToken=null;loadError='';paint();
         toast('已停用 Hermes 接入密钥。');
       }catch(err){$('#hm-error').textContent=err.message;e.target.disabled=false}
     };
@@ -160,7 +164,11 @@ async function openHermesIntegration(){
       }
     };
   };
-  renderModal();
+  paint();
+}
+function openHermesIntegration(){
+  if(location.hash==='#hermes')renderHermesPage();
+  else location.hash='hermes';
 }
 function paintSpaceCards(){
   const entries=spaceCatalog?.spaces||[];

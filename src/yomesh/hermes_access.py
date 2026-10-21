@@ -7,10 +7,9 @@ import hmac
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import threading
-
-from .model import ConfigError
 
 
 class HermesUnavailable(Exception):
@@ -36,9 +35,34 @@ class HermesAccess:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError) as error:
             raise HermesUnavailable("Hermes 接入凭据存储无法读取，请检查 data/hermes-access.json") from error
-        if not isinstance(data, dict) or data.get("version") != 1:
-            raise HermesUnavailable("Hermes 接入凭据格式不受支持")
-        return data
+        if not isinstance(data, dict):
+            return {"version": 1, "active": None}
+        if data.get("version") == 1:
+            return data
+        # Seamless migration from v0.16.x {"format": "yomesh-hermes-v1", "token_sha256": ..., "created": ...}
+        if data.get("format") == "yomesh-hermes-v1":
+            sha = data.get("token_sha256")
+            if isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{64}", sha) and sha != "0" * 64:
+                created_raw = data.get("created")
+                created_at = (
+                    datetime.fromtimestamp(created_raw, tz=timezone.utc)
+                    .replace(microsecond=0)
+                    .isoformat()
+                    .replace("+00:00", "Z")
+                    if isinstance(created_raw, (int, float))
+                    else None
+                )
+                return {
+                    "version": 1,
+                    "active": {
+                        "prefix": data.get("prefix") or "yomeshh_",
+                        "token_sha256": sha,
+                        "created_at": created_at,
+                        "last_used_at": data.get("last_used_at"),
+                    },
+                }
+            return {"version": 1, "active": None}
+        return {"version": 1, "active": None}
 
     def _save(self, data: dict) -> None:
         try:
@@ -109,7 +133,7 @@ class HermesAccess:
             return False
         scheme, _, raw = header.strip().partition(" ")
         token = raw.strip()
-        if scheme.lower() != "bearer" or not token.startswith("ymh_") or len(token) < 20:
+        if scheme.lower() != "bearer" or not token.startswith(("ymh_", "yomeshh_")) or len(token) < 20:
             return False
         with self.lock:
             data = self._load()
