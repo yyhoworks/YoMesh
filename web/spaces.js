@@ -13,6 +13,7 @@ pages.policies[0]='分流顺序';
 pages.policies[1]='从上到下依次匹配，拖动调整，兜底固定最后。';
 Object.assign(iconPaths,{
   spaces:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
+  hermes:'M12 3l2.4 5.2L20 10.5l-5.6 2.3L12 18l-2.4-5.2L4 10.5l5.6-2.3z',
   inbounds:'M14 4h6v16h-6M3 12h12M10 7l5 5-5 5',
   dns:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M3 12h18M12 3c4 4 4 14 0 18M12 3c-4 4-4 14 0 18'
 });
@@ -23,8 +24,9 @@ let spaceSwitchBusy=false, spaceListSerial=0,moreNavigationOpen=false;
 nav=function(){
   const countFor=p=>p==='spaces'?spaceCatalog?.spaces?.length:Array.isArray(data[p])?data[p].length:undefined;
   const link=p=>{const c=countFor(p);return `<a href="#${p}" class="nav-item ${page===p?'active':''}" ${page===p?'aria-current="page"':''}>${icon(p)}<span>${pages[p][0]}</span>${c!==undefined?`<span class="nav-count">${c}</span>`:''}</a>`};
-  $('#navigation').innerHTML=`${link('spaces')}<div class="nav-group">节点资源</div>${['sources','nodes'].map(link).join('')}<div class="nav-group">代理设置</div>${['groups','library','inbounds'].map(link).join('')}<button type="button" class="nav-item" id="nav-base-config" ${$('#base-config')?.disabled?'disabled':''}>${icon('settings')}<span>基础设置</span></button><div class="nav-group">DNS 设置</div>${link('dns')}`;
+  $('#navigation').innerHTML=`${link('spaces')}<div class="nav-group">节点资源</div>${['sources','nodes'].map(link).join('')}<div class="nav-group">代理设置</div>${['groups','library','inbounds'].map(link).join('')}<button type="button" class="nav-item" id="nav-base-config" ${$('#base-config')?.disabled?'disabled':''}>${icon('settings')}<span>基础设置</span></button><div class="nav-group">智能联动</div><button type="button" class="nav-item" id="nav-hermes-config">${icon('hermes')}<span>Hermes 接入</span></button>`;
   $('#nav-base-config').onclick=()=>{if(typeof setNavigation==='function')setNavigation(false);$('#base-config').click()};
+  $('#nav-hermes-config').onclick=()=>{if(typeof setNavigation==='function')setNavigation(false);if(typeof openHermesIntegration==='function')openHermesIntegration()};
 };
 function paintSpaceSelect(){
   $('#space-select').innerHTML=(spaceCatalog?.spaces||[]).map(s=>`<option value="${esc(s.id)}" ${s.id===spaceId?'selected':''}>${esc(s.name)}</option>`).join('');
@@ -51,8 +53,8 @@ bindPlanToolbar=function(){
   };
   if($('#migration-report'))$('#migration-report').onclick=showMigrationReport;
 };
-route=function(){const next=location.hash.slice(1);page=pages[next]?next:'spaces';query='';filter='all';selectedNodes.clear();render()};
-page=pages[location.hash.slice(1)]?location.hash.slice(1):'spaces';
+route=function(){const next=location.hash.slice(1);page=pages[next]&&next!=='dns'?next:'spaces';query='';filter='all';selectedNodes.clear();render()};
+page=pages[location.hash.slice(1)]&&location.hash.slice(1)!=='dns'?location.hash.slice(1):'spaces';
 $('#create').onclick=()=>({spaces:()=>editSpace(),sources:editSource,nodes:addNode,groups:addGroup,library:addLibrary,policies:editPolicy,inbounds:editInbound})[page]?.();
 $('#space-select').onchange=e=>switchSpace(e.target.value).catch(error=>{paintSpaceSelect();toast(error.message)});
 

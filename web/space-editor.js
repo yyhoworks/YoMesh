@@ -86,21 +86,95 @@ async function openConfigImport(){
     }
   };
 }
+async function openHermesIntegration(){
+  let status;
+  try{status=await api('/api/integrations/hermes')}catch(error){toast(error.message);return}
+  let freshToken=null;
+  const renderModal=()=>{
+    const baseUrl=location.origin;
+    const tokenDisplay=freshToken||'<生成后自动填入>';
+    const oneLineCmd=`curl -fsSL "${baseUrl}/api/setup/hermes_installer.py" | YOMESH_URL="${baseUrl}" YOMESH_TOKEN="${tokenDisplay}" python3 -`;
+    const manualYaml=`mcp_servers:\n  yomesh:\n    command: python3\n    args:\n      - /root/.local/share/yomesh/yomesh_hermes_mcp.py\n      - --config\n      - /root/.config/yomesh/hermes.json\n    enabled: true`;
+    showDialog('Hermes 智能助手接入',`<div id="hermes-integration-panel">
+      <p class="scope-editor-note">${badge(status.configured?'已启用':'未启用',status.configured?'accent':'')} 连接 Hermes 后，你可以直接用自然语言查域名分流原因、一句话添加规则、测速节点或获取订阅链接。</p>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="section-title">
+          <h3>第 1 步：生成接入命令</h3>
+          <span>${status.configured?`当前密钥前缀：<code>${esc(status.prefix||'ymh_')}***</code>`:'尚未生成接入密钥'}</span>
+        </div>
+        <p class="preview-note">${status.last_used_at?'最近调用时间：'+esc(serverTime(status.last_used_at)):'点击下方按钮生成一键安装命令（旧密钥会立即失效）。'}</p>
+        <div class="filter-row" style="margin-top:10px">
+          <button type="button" class="button primary" id="hm-rotate">${status.configured?'重新生成一键接入命令':'生成一键接入命令'}</button>
+          ${status.configured?'<button type="button" class="button danger-button" id="hm-revoke">停用 Hermes 接入</button>':''}
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="section-title">
+          <h3>第 2 步：在 Hermes 所在机器执行（一行搞定）</h3>
+          ${freshToken?badge('含最新密钥 · 请立即复制','accent'):''}
+        </div>
+        <p class="preview-note">${freshToken?'复制下方命令到运行 Hermes 的服务器终端执行，将自动下载桥接脚本、写入 ~/.hermes/config.yaml 并运行连通性自检：':'请先点击上方「生成一键接入命令」，这里会自动填入包含完整密钥的一行安装命令：'}</p>
+        <pre class="code-preview mono" id="hm-cmd" style="white-space:pre-wrap;word-break:break-all;margin:8px 0">${esc(oneLineCmd)}</pre>
+        <div class="filter-row">
+          <button type="button" class="button ${freshToken?'primary':''}" id="hm-copy-cmd" ${freshToken?'':'disabled'}>复制一键安装命令</button>
+        </div>
+        <details class="advanced-options" style="margin-top:12px">
+          <summary>查看手动配置 ~/.hermes/config.yaml 与支持的 AI 指令</summary>
+          <p class="preview-note" style="margin-top:8px">一键命令会自动写入以下配置到 <code>~/.hermes/config.yaml</code>：</p>
+          <pre class="code-preview mono">${esc(manualYaml)}</pre>
+          <p class="preview-note" style="margin-top:8px">配置完成后，你可以直接对 Hermes 说：</p>
+          <ul style="margin:6px 0 0 18px;font-size:13px;line-height:1.7">
+            <li>“帮我查一下 <code>claude.ai</code> 在 YoMesh 里走哪个节点组？”（<code>yomesh_diagnose_domain</code>）</li>
+            <li>“把 <code>openai.com</code> 加到 AI 节点组”（<code>yomesh_add_rule</code>）</li>
+            <li>“帮我测速一下当前空间的节点延迟”（<code>yomesh_test_nodes</code>）</li>
+            <li>“把当前空间的 Mihomo 订阅链接发给我”（<code>yomesh_subscription_link</code>）</li>
+          </ul>
+        </details>
+      </div>
+      <p id="hm-error" class="error-message" role="alert"></p>
+      <div class="dialog-actions"><button type="button" class="button" id="hm-close">关闭</button></div>
+    </div>`);
+    $('#hm-close').onclick=()=>$('#dialog').close();
+    $('#hm-rotate').onclick=async e=>{
+      e.target.disabled=true;
+      try{
+        const res=await api('/api/integrations/hermes/rotate',{});
+        status=res;freshToken=res.token;renderModal();
+        toast('已生成新的 Hermes 一键接入命令。');
+      }catch(err){$('#hm-error').textContent=err.message;e.target.disabled=false}
+    };
+    if($('#hm-revoke'))$('#hm-revoke').onclick=async e=>{
+      e.target.disabled=true;
+      try{
+        status=await api('/api/integrations/hermes/revoke',{});
+        freshToken=null;renderModal();
+        toast('已停用 Hermes 接入密钥。');
+      }catch(err){$('#hm-error').textContent=err.message;e.target.disabled=false}
+    };
+    if($('#hm-copy-cmd'))$('#hm-copy-cmd').onclick=async()=>{
+      try{
+        await navigator.clipboard.writeText(oneLineCmd);
+        toast('一键安装命令已复制，去 Hermes 终端粘贴执行即可。');
+      }catch{
+        toast('请手动选中上方命令复制。');
+      }
+    };
+  };
+  renderModal();
+}
 function paintSpaceCards(){
   const entries=spaceCatalog?.spaces||[];
-  const currentDns=nativeMode()?nativeDnsName():'MosDNS';
-  $('#content').innerHTML=`<div class="configuration-overview"><div><h2>代理配置与导入</h2><p>支持直接读取现有 Mihomo YAML、sing-box JSON 与 LocalDNS 配置，按方案独立维护。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button primary" id="space-import-config">导入现有配置</button><button type="button" class="button" id="space-open-subscription">获取订阅链接（联动 LocalDNS）</button></div></div><div><h2>${currentDns} 配置</h2><p>独立上游、解析规则、缓存与监听；在 LocalDNS 的代理管理器中填入订阅链接即可联动更新。</p><button type="button" class="text-button" id="space-open-dns">配置当前 ${currentDns} ${icon('arrow')}</button></div></div><div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{
-    const current=s.id===spaceId,counts=s.counts||{},g=s.generation||{},issues=g.excluded_policies?.length||0,dnsLabel=s.dns_engine==='localdns'?'LocalDNS':s.dns_engine==='mosdns'||!s.native?'MosDNS':'DNS';
+  $('#content').innerHTML=`<div class="configuration-overview"><div><h2>代理配置与 LocalDNS 联动</h2><p>导入现有 Mihomo YAML / sing-box JSON 或添加订阅节点；生成订阅链接填入 LocalDNS 的代理管理器即可自动拉取更新。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button primary" id="space-import-config">导入现有配置</button><button type="button" class="button" id="space-open-subscription">获取订阅链接（联动 LocalDNS）</button></div></div><div><h2>Hermes 智能助手</h2><p>一行命令自动配好 <code>~/.hermes/config.yaml</code>，直接用自然语言查域名分流、加规则、测速节点。</p><div class="filter-row" style="margin-top:10px"><button type="button" class="button" id="space-open-hermes">配置 Hermes 接入</button></div></div></div><div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{
+    const current=s.id===spaceId,counts=s.counts||{},g=s.generation||{},issues=g.excluded_policies?.length||0;
     const actions=current
-      ?`<button class="button primary" data-space-export="${esc(s.id)}">${actionIcon('download')}导出代理</button><button class="button" data-space-subscription="${esc(s.id)}">订阅链接</button><button class="button" data-space-configure="${esc(s.id)}">去配置规则</button><button class="text-button" data-space-dns="${esc(s.id)}">${dnsLabel} 配置</button>${resourceMenu(s.name,`<button data-space-edit="${esc(s.id)}">${s.native?'修改名称与说明':'编辑方案选用'}</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" disabled>${s.id==='default'?'默认方案保留':'切换后可删除'}</button>`)}`
-      :`<button class="button primary" data-space-use="${esc(s.id)}">切换到此方案</button><button class="button" data-space-edit="${esc(s.id)}">${s.native?'改名 / 说明':'编辑选用'}</button><button class="button" data-space-copy="${esc(s.id)}">复制为新方案</button>${resourceMenu(s.name,`<button data-space-subscription="${esc(s.id)}">切换并查看订阅链接</button><button data-space-export="${esc(s.id)}">切换并导出代理</button><button data-space-dns="${esc(s.id)}">切换并配置 ${dnsLabel}</button><button class="danger-action" data-space-delete="${esc(s.id)}" ${s.id==='default'?'disabled':''}>${s.id==='default'?'默认方案保留':'删除此方案'}</button>`)}`;
+      ?`<button class="button primary" data-space-export="${esc(s.id)}">${actionIcon('download')}导出代理</button><button class="button" data-space-subscription="${esc(s.id)}">订阅链接</button><button class="button" data-space-configure="${esc(s.id)}">去配置规则</button>${resourceMenu(s.name,`<button data-space-edit="${esc(s.id)}">${s.native?'修改名称与说明':'编辑方案选用'}</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" disabled>${s.id==='default'?'默认方案保留':'切换后可删除'}</button>`)}`
+      :`<button class="button primary" data-space-use="${esc(s.id)}">切换到此方案</button><button class="button" data-space-edit="${esc(s.id)}">${s.native?'改名 / 说明':'编辑选用'}</button><button class="button" data-space-copy="${esc(s.id)}">复制为新方案</button>${resourceMenu(s.name,`<button data-space-subscription="${esc(s.id)}">切换并查看订阅链接</button><button data-space-export="${esc(s.id)}">切换并导出代理</button><button class="danger-action" data-space-delete="${esc(s.id)}" ${s.id==='default'?'disabled':''}>${s.id==='default'?'默认方案保留':'删除此方案'}</button>`)}`;
     return `<article class="panel space-card ${current?'selected':''}" aria-label="${esc(s.name)}配置空间"><div class="space-card-heading"><div><h2>${esc(s.name)}</h2><p>${s.native?'Mihomo YAML':s.proxy==='sing-box'?'sing-box JSON':'Mihomo YAML'} · ${s.native?'原生引用与缓存':{inline:'内联规则',local:'本地文件引用',remote:'远程订阅引用'}[s.rule_output]||'内联规则'}</p></div>${current?badge('当前使用中','accent'):badge('未激活')}</div><p class="space-description">${esc(s.description||'节点组 + 规则 + 分流策略的生成方案')}</p><div class="space-counts"><span><b>${counts.groups||0}</b> 节点组</span><span><b>${counts.library||0}</b> 规则</span><span><b>${counts.policies||0}</b> 策略</span></div><p class="space-readiness ${g.error?'error-message':'generation-ready'}">${g.error?esc(g.error):g.valid?'代理选用检查通过':'等待代理检查'}${issues?` · 跳过 ${issues} 条策略`:''}</p><div class="space-card-actions">${actions}</div></article>`;
   }).join('')}</div><p class="preview-note">“当前使用中”表示左侧导航正在编辑该方案。切换方案或导出前都会自动执行原生内核校验。</p>`;
   $('#space-import-config').onclick=openConfigImport;
   $('#space-open-subscription').onclick=openSubscriptionLink;
-  $('#space-open-dns').onclick=()=>{location.hash='dns'};
+  $('#space-open-hermes').onclick=openHermesIntegration;
   $$('[data-space-configure]').forEach(b=>b.onclick=()=>{location.hash='library'});
-  $$('[data-space-dns]').forEach(b=>b.onclick=async()=>{try{await switchSpace(b.dataset.spaceDns);location.hash='dns'}catch(error){toast(error.message)}});
   $$('[data-space-use]').forEach(b=>b.onclick=()=>switchSpace(b.dataset.spaceUse).catch(error=>toast(error.message)));
   $$('[data-space-edit]').forEach(b=>b.onclick=()=>editSpace(b.dataset.spaceEdit));
   $$('[data-space-copy]').forEach(b=>b.onclick=()=>editSpace(null,b.dataset.spaceCopy));

@@ -11,6 +11,8 @@ from pathlib import Path
 from . import __version__
 from .auth import SESSION_COOKIE, SESSION_TTL_SECONDS, AuthStore, AuthUnavailable
 from .compiler import compile_bundle
+from .hermes_access import HermesAccess, HermesUnavailable
+from .hermes_service import HermesService
 from .model import ConfigError, Profile
 from .native import find_core, serialize_config, validate_bundle
 from .publication import Publications
@@ -23,14 +25,17 @@ def handler_for(root: Path, port: int, public_hosts=()):
     allowed_origins = {scheme + h for h in allowed_hosts for scheme in ("http://", "https://")}
     spaces = ConfigurationSpaces(root)
     publications = Publications(root, spaces)
+    hermes_access = HermesAccess(root)
     auth = AuthStore(root)
     from .interaction_service import InteractionService
     interactions = InteractionService(root, spaces)
+    hermes_service = HermesService(root, spaces, publications, interactions)
     subscriptions = spaces.runtime("default").subscriptions
 
     class Handler(SimpleHTTPRequestHandler):
         subscription_service = subscriptions
         space_catalog = spaces
+        hermes_store = hermes_access
         auth_store = auth
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(root / "web"), **kwargs)
@@ -95,6 +100,8 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 self._do_GET()
             except AuthUnavailable as error:
                 self.json_response(503, {"error": str(error), "auth_unavailable": True})
+            except HermesUnavailable as error:
+                self.json_response(503, {"error": str(error)})
 
         def _do_GET(self):
             if self.path.startswith("/s/"):
@@ -134,8 +141,40 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 user = self.authenticated_user()
                 self.json_response(200, {"enabled": auth.is_enabled(), "authenticated": user is not None, "username": user or auth.current_username()})
                 return
+            if self.path.startswith("/api/setup/"):
+                name = self.path.removeprefix("/api/setup/")
+                if name not in {"yomesh_hermes_mcp.py", "hermes_installer.py"}:
+                    self.json_response(404, {"error": "安装文件不存在"})
+                    return
+                try:
+                    raw = (root / "scripts" / name).read_bytes()
+                except OSError:
+                    self.json_response(503, {"error": "安装文件暂不可用，请检查 YoMesh 安装目录中的 scripts 文件夹"})
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "text/x-python; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+                return
+            if self.path.startswith("/api/hermes/"):
+                if not hermes_access.verify(self.headers.get("Authorization")):
+                    self.json_response(401, {"error": "Hermes 接入密钥无效或已停用"})
+                    return
+                try:
+                    if self.path == "/api/hermes/spaces":
+                        self.json_response(200, hermes_service.spaces_overview())
+                    else:
+                        self.json_response(404, {"error": "Hermes 接口不存在"})
+                except ConfigError as error:
+                    self.json_response(422, {"error": str(error)})
+                return
             if self.path.startswith("/api/") and self.authenticated_user() is None:
                 self.json_response(401, {"error": "请先登录 YoMesh 工作台", "auth_required": True, "username": auth.current_username()})
+                return
+            if self.path == "/api/integrations/hermes":
+                self.json_response(200, hermes_access.listing())
                 return
             if self.path == "/api/spaces":
                 self.json_response(200, spaces.snapshot())
@@ -168,7 +207,7 @@ def handler_for(root: Path, port: int, public_hosts=()):
             if not self.local_request():
                 self.json_response(403, {"error": "请求地址未列入 YoMesh 允许的访问地址"})
                 return
-            if self.path != "/api/export" and not self.path.startswith(("/api/auth", "/api/spaces", "/api/sources", "/api/workspace", "/api/nodes", "/api/library", "/api/groups")):
+            if self.path != "/api/export" and not self.path.startswith(("/api/auth", "/api/spaces", "/api/hermes", "/api/integrations/hermes", "/api/sources", "/api/workspace", "/api/nodes", "/api/library", "/api/groups")):
                 self.json_response(404, {"error": "接口不存在"})
                 return
             try:
@@ -179,6 +218,22 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 request = json.loads(self.rfile.read(length).decode("utf-8"))
                 if not isinstance(request, dict):
                     raise ConfigError("请求需要对象")
+                if self.path.startswith("/api/hermes/"):
+                    if not hermes_access.verify(self.headers.get("Authorization")):
+                        self.json_response(401, {"error": "Hermes 接入密钥无效或已停用"})
+                        return
+                    if self.path == "/api/hermes/diagnose":
+                        self.json_response(200, hermes_service.diagnose_query(request))
+                    elif self.path == "/api/hermes/rules/add":
+                        self.json_response(200, hermes_service.add_rule(request))
+                    elif self.path == "/api/hermes/nodes":
+                        self.json_response(200, hermes_service.nodes_overview(request))
+                    elif self.path == "/api/hermes/subscription":
+                        host = self.headers.get("Host") or f"127.0.0.1:{port}"
+                        self.json_response(200, hermes_service.subscription_link(request, f"http://{host}"))
+                    else:
+                        self.json_response(404, {"error": "Hermes 接口不存在"})
+                    return
                 if self.path == "/api/auth/login":
                     token = auth.login(str(request.get("username") or ""), str(request.get("password") or ""))
                     cookie_val = f"{SESSION_COOKIE}={token}; Path=/; Max-Age={SESSION_TTL_SECONDS}; HttpOnly; SameSite=Lax"
@@ -204,6 +259,14 @@ def handler_for(root: Path, port: int, public_hosts=()):
                     )
                     cookie_val = f"{SESSION_COOKIE}={token}; Path=/; Max-Age={SESSION_TTL_SECONDS}; HttpOnly; SameSite=Lax"
                     self.json_response(200, {"ok": True, "username": auth.current_username(), "enabled": True}, extra_headers=[("Set-Cookie", cookie_val)])
+                    return
+                if self.path.startswith("/api/integrations/hermes"):
+                    if self.path == "/api/integrations/hermes/rotate":
+                        self.json_response(200, hermes_access.rotate())
+                    elif self.path == "/api/integrations/hermes/revoke":
+                        self.json_response(200, hermes_access.revoke())
+                    else:
+                        self.json_response(404, {"error": "Hermes 接口不存在"})
                     return
                 if self.path == "/api/spaces/group-category-names":
                     self.json_response(200, spaces.save_group_category_names(request.get("names"), request.get("revision")))
@@ -481,6 +544,8 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 self.wfile.write(raw)
             except AuthUnavailable as error:
                 self.json_response(503, {"error": str(error), "auth_unavailable": True})
+            except HermesUnavailable as error:
+                self.json_response(503, {"error": str(error)})
             except Conflict as error:
                 self.json_response(409, {"error": str(error)})
             except (ConfigError, ValueError, TypeError, KeyError) as error:
