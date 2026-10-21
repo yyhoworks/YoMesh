@@ -9,11 +9,15 @@ from pathlib import Path
 import re
 import secrets
 import threading
+import time
+import tempfile
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
 from .model import ConfigError
+from .subscriptions import fetch_subscription
+from .workspace import clean_source
 
 
 PRESET_REGIONS = [
@@ -291,17 +295,31 @@ class ClientControllers:
                 return data
         except (OSError, ValueError):
             pass
-        return {"version": 1, "controllers": {}}
+        raise ConfigError("控制器配置无法读取，未修改原文件；请检查 data/client-controllers.json 或恢复备份")
 
     def _save(self, data: dict) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        temp = self.path.with_name(f".controllers.{secrets.token_hex(6)}.tmp")
-        temp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        descriptor, temporary = tempfile.mkstemp(prefix=".controllers-", dir=self.path.parent)
         try:
-            os.chmod(temp, 0o600)
-        except OSError:
-            pass
-        os.replace(temp, self.path)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                json.dump(data, output, ensure_ascii=False, indent=2)
+                output.write("\n")
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, self.path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+    @staticmethod
+    def _response_json(response):
+        raw = response.read(65537)
+        if len(raw) > 65536:
+            raise ValueError("控制器响应超过 64 KiB 限制")
+        data = json.loads(raw.decode("utf-8") or "{}")
+        if not isinstance(data, dict):
+            raise ValueError("控制器响应需要 JSON 对象")
+        return data
 
     def all_items(self) -> dict:
         return self.listing()["controllers"]
@@ -332,13 +350,21 @@ class ClientControllers:
             raw_url = str(payload.get("url") or "").strip().rstrip("/")
             if not re.match(r"^https?://", raw_url, re.IGNORECASE):
                 raw_url = "http://" + raw_url
-            parsed = urlsplit(raw_url)
-            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            try:
+                parsed = urlsplit(raw_url)
+                parsed.port
+            except ValueError:
+                raise ConfigError("控制器地址的主机或端口无效") from None
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment or parsed.path not in {"", "/"}:
                 raise ConfigError("请填写有效的 Mihomo 控制器地址，例如 http://192.168.1.2:9090")
             clean_url = f"{parsed.scheme}://{parsed.netloc}"
             existing = data["controllers"].get(space_id) or {}
             secret = payload.get("secret")
-            if secret is None or secret == "••••••••":
+            if payload.get("clear_secret") is True:
+                if secret:
+                    raise ConfigError("清除密钥时请留空新密钥")
+                secret = ""
+            elif secret is None or secret == "" or secret == "••••••••":
                 secret = existing.get("secret", "")
             else:
                 secret = str(secret).strip()
@@ -377,7 +403,7 @@ class ClientControllers:
         req = Request(url + "/version", headers=headers, method="GET")
         try:
             with urlopen(req, timeout=3) as resp:
-                body = json.loads(resp.read().decode("utf-8", errors="replace") or "{}")
+                body = ClientControllers._response_json(resp)
                 return {"reachable": True, "version": body.get("version", "mihomo"), "message": "连接成功"}
         except HTTPError as err:
             if err.code in (401, 403):
@@ -404,7 +430,7 @@ class ClientControllers:
                 try:
                     req = Request(f"{base}/providers/{kind}", headers=headers, method="GET")
                     with urlopen(req, timeout=2.5) as resp:
-                        pdata = json.loads(resp.read().decode("utf-8", errors="replace") or "{}")
+                        pdata = self._response_json(resp)
                     for name, item in (pdata.get("providers") or {}).items():
                         if isinstance(item, dict) and item.get("vehicleType") == "HTTP":
                             put_req = Request(
@@ -555,26 +581,31 @@ def quick_create_space(spaces, publications, request: dict, default_base_url: st
         }
         for idx, u in enumerate(urls)
     ]
-    nodes = [{
-        "id": "n_seed_default",
-        "name": "🇭🇰香港 🇹🇼台湾 🇯🇵日本 🇸🇬新加坡 🇺🇸美国 · 示例节点",
-        "protocol": "trojan",
-        "server": "node.example.com",
-        "port": 443,
-        "password": "seed-password",
-        "tls": {"enabled": True, "server_name": "node.example.com", "insecure": False},
-        "udp": True,
-        "source": "manual",
-        "enabled": True,
-    }]
+    if not sources or len(sources) > 8:
+        raise ConfigError("快速创建需要 1–8 条订阅地址；没有订阅时请使用新建配置空间")
+    sources = [clean_source(source) for source in sources]
+    nodes, fetched_stats = [], {}
+    # Resolve real nodes before creating a space or exposing a publication URL.
+    for index, source in enumerate(sources, 1):
+        try:
+            fetched, stats = fetch_subscription(source)
+        except Exception:
+            raise ConfigError(f"第 {index} 条订阅读取失败，未创建或发布空间；请检查地址后重试") from None
+        if not fetched:
+            raise ConfigError(f"第 {index} 条订阅没有可用节点，未创建或发布空间")
+        nodes.extend(fetched)
+        fetched_stats[source["id"]] = stats
 
     source_ids = [s["id"] for s in sources]
-    node_ids = [n["id"] for n in nodes]
 
     groups = []
     region_id_by_key = {}
+    warnings = []
     for reg in PRESET_REGIONS:
         if reg["key"] not in selected_regions:
+            continue
+        if not any(re.search(reg["filter"], node["name"], re.IGNORECASE) for node in nodes):
+            warnings.append(reg["name"] + "没有匹配节点，未创建空节点组")
             continue
         gid = reg["id"]
         region_id_by_key[reg["key"]] = gid
@@ -583,7 +614,7 @@ def quick_create_space(spaces, publications, request: dict, default_base_url: st
             "name": reg["name"],
             "mode": "url-test",
             "sources": list(source_ids),
-            "nodes": list(node_ids),
+            "nodes": [],
             "groups": [],
             "include": reg["filter"],
             "exclude": "",
@@ -596,7 +627,7 @@ def quick_create_space(spaces, publications, request: dict, default_base_url: st
         "name": "🚀 默认代理",
         "mode": "select",
         "sources": list(source_ids),
-        "nodes": list(node_ids),
+        "nodes": [],
         "groups": list(region_id_by_key.values()),
         "include": "",
         "exclude": "",
@@ -614,7 +645,7 @@ def quick_create_space(spaces, publications, request: dict, default_base_url: st
         rule_id = item.get("id") or item.get("key") if isinstance(item, dict) else str(item)
         preset = preset_lookup.get(str(rule_id))
         if not preset:
-            continue
+            raise ConfigError("所选预设规则不存在，未创建空间")
         lid = "l_" + preset["id"]
         library.append({
             "id": lid,
@@ -628,8 +659,10 @@ def quick_create_space(spaces, publications, request: dict, default_base_url: st
             target = raw_target
         elif raw_target in region_id_by_key:
             target = region_id_by_key[raw_target]
-        else:
+        elif raw_target in {"proxy", "g_default"}:
             target = "g_default"
+        else:
+            raise ConfigError("规则指定的地区出口未选用或没有真实节点，请调整地区/规则后重试；未创建空间")
         policies.append({
             "id": "p_" + preset["id"],
             "name": preset["name"],
@@ -661,11 +694,14 @@ def quick_create_space(spaces, publications, request: dict, default_base_url: st
         rule_output="inline",
     )
     new_space_id = created_catalog["id"]
-    spaces.select(new_space_id, spaces.snapshot()["revision"])
-
+    runtime = spaces.runtime(new_space_id)
+    now = time.time()
+    for source_id, stats in fetched_stats.items():
+        runtime.workspace.status(source_id, {**stats, "last_attempt": now, "last_updated": now, "refresh_state": "success"})
     saved_ws = spaces.workspace_snapshot(new_space_id)
     base_url = str(request.get("base_url") or default_base_url).strip()
     link = None
+    publication_error = ""
     try:
         link = publications.create(
             new_space_id,
@@ -676,16 +712,11 @@ def quick_create_space(spaces, publications, request: dict, default_base_url: st
                 "revision": saved_ws["revision"],
             },
         )
+    except ConfigError as error:
+        publication_error = str(error)
     except Exception:
-        links = publications.listing(new_space_id).get("links", [])
-        link = links[-1] if links else None
-
-    runtime = spaces.runtime(new_space_id)
-    for sid in source_ids:
-        try:
-            runtime.subscriptions.refresh(sid)
-        except Exception:
-            pass
+        publication_error = "发布未完成；空间已保存，请检查配置与内核后重新生成链接"
+    spaces.select(new_space_id, spaces.snapshot()["revision"])
 
     final_catalog = spaces.snapshot()
     return {
@@ -694,6 +725,9 @@ def quick_create_space(spaces, publications, request: dict, default_base_url: st
         "id": new_space_id,
         "subscription": link,
         "subscription_link": link,
+        "status": "ready" if link else "draft",
+        "publication_error": publication_error,
+        "warnings": warnings,
         "summary": {
             "nodes": len(profile.get("nodes", [])),
             "groups": len(profile.get("groups", [])),

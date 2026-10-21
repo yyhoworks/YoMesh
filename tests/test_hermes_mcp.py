@@ -6,6 +6,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from yomesh.server import handler_for
+from helpers import fetched_fixture
 
 
 class HermesMcpTests(unittest.TestCase):
@@ -145,17 +147,18 @@ class HermesMcpTests(unittest.TestCase):
         status, saved_def = self.api("/api/workspace", {"profile": default_prof, "revision": default_ws["revision"]})
         self.assertEqual(status, 200, saved_def)
 
-        status, qc_res = self.api(
-            "/api/spaces/quick-create",
-            {
-                "name": "三步极速方案",
-                "proxy": "mihomo",
-                "subscription_url": "",
-                "regions": ["hk", "us", "sg"],
-                "rules": ["adblock", "ai", "youtube", "cn"],
-                "base_url": self.base,
-            },
-        )
+        with patch("yomesh.quick_setup.fetch_subscription", side_effect=fetched_fixture):
+            status, qc_res = self.api(
+                "/api/spaces/quick-create",
+                {
+                    "name": "三步极速方案",
+                    "proxy": "mihomo",
+                    "subscription_url": "https://fixture.example/sub",
+                    "regions": ["hk", "us", "sg"],
+                    "rules": ["adblock", "ai", "youtube", "cn"],
+                    "base_url": self.base,
+                },
+            )
         self.assertEqual(status, 200, qc_res)
         self.assertEqual(qc_res["summary"]["groups"], 4)  # Proxy + 3 regions
         self.assertEqual(qc_res["summary"]["policies"], 4)

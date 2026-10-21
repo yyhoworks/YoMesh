@@ -75,6 +75,9 @@ def handler_for(root: Path, port: int, public_hosts=()):
         def log_message(self, format, *args):
             if self.path.startswith("/s/"):
                 return super().log_message("%s", "subscription request (URL redacted)")
+            if "?" in self.path:
+                # Credentials can occur in query strings, including legacy MCP URLs.
+                return super().log_message("%s", self.path.split("?", 1)[0] + " (query redacted)")
             return super().log_message(format, *args)
 
         def send_head(self):
@@ -294,7 +297,12 @@ def handler_for(root: Path, port: int, public_hosts=()):
                     return
                 if self.path.startswith("/api/integrations/hermes"):
                     if self.path == "/api/integrations/hermes/rotate":
-                        self.json_response(200, hermes_access.rotate())
+                        from .hermes_setup import hermes_setup_metadata, installation_command
+                        from .publication import public_base
+                        base = public_base(request.get("base_url") or "http://" + self.headers.get("Host", "127.0.0.1"))
+                        setup = hermes_setup_metadata(root)
+                        rotated = hermes_access.rotate()
+                        self.json_response(200, {**rotated, "installation_command": installation_command(base, rotated["token"], setup)})
                     elif self.path == "/api/integrations/hermes/revoke":
                         self.json_response(200, hermes_access.revoke())
                     else:

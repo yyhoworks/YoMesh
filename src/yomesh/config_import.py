@@ -324,7 +324,7 @@ def _convert_mihomo_to_profile(config: dict, extra_files: dict[str, bytes], wiri
     provider_source_ids: dict[str, str] = {}
     for pname, pdef in (config.get("proxy-providers") or {}).items():
         if not isinstance(pdef, dict):
-            continue
+            raise ConfigError("节点来源需要对象；请使用原生导入保留原件")
         url = str(pdef.get("url") or "").strip()
         parsed_url = urlsplit(url)
         if parsed_url.scheme in {"http", "https"} and parsed_url.hostname and not parsed_url.username and not parsed_url.password:
@@ -337,11 +337,13 @@ def _convert_mihomo_to_profile(config: dict, extra_files: dict[str, bytes], wiri
             if path_key and path_key in normalized_extra:
                 try:
                     cached = yaml.safe_load(normalized_extra[path_key].decode("utf-8-sig"))
-                    for raw_node in (cached.get("proxies") or []) if isinstance(cached, dict) else []:
+                    if not isinstance(cached, dict) or not isinstance(cached.get("proxies"), list):
+                        raise ConfigError("节点来源缓存需要 proxies 列表")
+                    for raw_node in cached["proxies"]:
                         node = normalize(clash_node(raw_node), sid)
                         profile["nodes"].append(node)
                 except Exception:
-                    pass
+                    raise ConfigError("节点来源缓存无法完整转换；请使用原生导入保留原件") from None
 
     node_by_name: dict[str, str] = {}
     seen_node_ids: set[str] = {n["id"] for n in profile["nodes"]}
@@ -350,18 +352,22 @@ def _convert_mihomo_to_profile(config: dict, extra_files: dict[str, bytes], wiri
 
     for raw_node in config.get("proxies") or []:
         if not isinstance(raw_node, dict):
-            continue
+            raise ConfigError("节点记录需要对象")
         try:
             node = normalize(clash_node(raw_node), "manual")
-        except ConfigError:
-            continue
+        except (ValueError, TypeError, AttributeError, KeyError):
+            raise ConfigError("有节点无法完整转换；请使用原生导入保留协议与扩展") from None
         if node["id"] in seen_node_ids:
             node["id"] = "n_" + hashlib.sha256((node["id"] + "\0" + node["name"]).encode("utf-8")).hexdigest()[:20]
         seen_node_ids.add(node["id"])
         node_by_name[node["name"]] = node["id"]
         profile["nodes"].append(node)
 
-    raw_groups = [g for g in (config.get("proxy-groups") or []) if isinstance(g, dict) and isinstance(g.get("name"), str) and g["name"].strip()]
+    raw_groups = config.get("proxy-groups") or []
+    if not isinstance(raw_groups, list) or any(not isinstance(g, dict) or not isinstance(g.get("name"), str) or not g["name"].strip() for g in raw_groups):
+        raise ConfigError("节点组需要带名称的对象列表")
+    if len({g["name"].strip() for g in raw_groups}) != len(raw_groups):
+        raise ConfigError("节点组名称重复，不能合并为同一出口")
     group_by_name: dict[str, str] = {}
     for idx, g in enumerate(raw_groups):
         gid = f"g_{idx + 1}_" + hashlib.sha256(g["name"].strip().encode("utf-8")).hexdigest()[:10]
@@ -373,12 +379,14 @@ def _convert_mihomo_to_profile(config: dict, extra_files: dict[str, bytes], wiri
         gid = group_by_name[gname]
         gmode = str(g.get("type") or "select").lower()
         if gmode not in MODES:
-            gmode = "select"
-        sources = [provider_source_ids[u] for u in (g.get("use") or []) if u in provider_source_ids]
+            raise ConfigError("节点组方式无法等价转换，请使用原生导入")
+        if any(u not in provider_source_ids for u in g.get("use", [])):
+            raise ConfigError("节点组引用了无法转换的节点来源，请使用原生导入")
+        sources = [provider_source_ids[u] for u in (g.get("use") or [])]
         nodes, child_groups, order = [], [], []
         for member in g.get("proxies") or []:
             if not isinstance(member, str):
-                continue
+                raise ConfigError("节点组成员需要文本")
             if member in node_by_name:
                 nid = node_by_name[member]
                 if nid not in nodes:
@@ -389,6 +397,8 @@ def _convert_mihomo_to_profile(config: dict, extra_files: dict[str, bytes], wiri
                 if cid not in child_groups:
                     child_groups.append(cid)
                     order.append(cid)
+            else:
+                raise ConfigError("节点组包含无法保留的成员；请使用原生导入，不能删减候选出口")
         group_obj = {
             "id": gid,
             "name": gname[:80],
@@ -406,11 +416,13 @@ def _convert_mihomo_to_profile(config: dict, extra_files: dict[str, bytes], wiri
 
     profile["groups"] = groups
     _mark_empty_groups_disabled(profile)
+    if any(not group.get("enabled", True) for group in profile["groups"]):
+        raise ConfigError("节点组缺少可转换的真实成员，请使用原生导入保留原组")
 
     rule_provider_ids: dict[str, str] = {}
     for rname, rdef in (config.get("rule-providers") or {}).items():
         if not isinstance(rdef, dict):
-            continue
+            raise ConfigError("规则来源需要对象")
         lid = "l_" + hashlib.sha256(str(rname).encode("utf-8")).hexdigest()[:16]
         entries = []
         if isinstance(rdef.get("payload"), list):
@@ -419,7 +431,7 @@ def _convert_mihomo_to_profile(config: dict, extra_files: dict[str, bytes], wiri
                 parsed_item, _ = parse_rules(body, "clash", root)
                 entries = parsed_item["entries"]
             except ConfigError:
-                entries = []
+                raise ConfigError("规则来源缓存无法完整转换；请使用原生导入") from None
         elif isinstance(rdef.get("path"), str) and rdef["path"].strip():
             path_key = _normalize_mihomo_path(rdef["path"])
             if path_key in normalized_extra:
@@ -427,9 +439,9 @@ def _convert_mihomo_to_profile(config: dict, extra_files: dict[str, bytes], wiri
                     parsed_item, _ = parse_rules(normalized_extra[path_key], "auto", root)
                     entries = parsed_item["entries"]
                 except ConfigError:
-                    entries = []
+                    raise ConfigError("规则来源缓存无法完整转换；请使用原生导入") from None
         if not entries:
-            continue
+            raise ConfigError("规则来源缺少可转换的缓存；请使用原生导入保留来源")
         lib_item = {"id": lid, "name": str(rname)[:100], "kind": "classical", "entries": entries}
         url = str(rdef.get("url") or "").strip()
         parsed_url = urlsplit(url)
@@ -443,15 +455,15 @@ def _convert_mihomo_to_profile(config: dict, extra_files: dict[str, bytes], wiri
                     "interval_minutes": max(1, min(43200, round(int(rdef.get("interval") or 86400) / 60) or 1440)),
                 })
             except ConfigError:
-                pass
+                raise ConfigError("规则来源设置无法转换；请使用原生导入") from None
         profile["library"].append(lib_item)
         rule_provider_ids[str(rname)] = lid
 
     def resolve_target(raw_target: str) -> str:
         t = raw_target.strip()
-        if t in {"DIRECT", " Compatibility", "COMPATIBLE", "PASS"}:
+        if t == "DIRECT":
             return "DIRECT"
-        if t in {"REJECT", "REJECT-DROP"}:
+        if t == "REJECT":
             return "REJECT"
         if t in group_by_name:
             gid = group_by_name[t]
@@ -460,27 +472,37 @@ def _convert_mihomo_to_profile(config: dict, extra_files: dict[str, bytes], wiri
                 return gid
         if t in node_by_name:
             return node_by_name[t]
-        enabled_groups = [g["id"] for g in profile["groups"] if g.get("enabled", True)]
-        return enabled_groups[0] if enabled_groups else "DIRECT"
+        raise ConfigError("规则出口不存在、已停用或无法等价转换；请使用原生导入核对出口")
 
     fallback = "DIRECT"
-    grouped_inline: dict[tuple[str, str], list[str]] = {}
     policy_order: list[dict] = []
+    has_fallback = False
 
     for idx, line in enumerate(config.get("rules") or []):
         if not isinstance(line, str) or not line.strip():
+            raise ConfigError(f"第 {idx + 1} 条规则需要非空文本")
+        if has_fallback:
+            raise ConfigError("MATCH / FINAL 后仍有规则，无法保留顺序；请使用原生导入")
+        body, comma, raw_target = line.strip().rpartition(",")
+        no_resolve = raw_target.strip() == "no-resolve"
+        if no_resolve:
+            body, comma, raw_target = body.rpartition(",")
+        if not comma or raw_target.strip() in {"src", "dst"}:
+            raise ConfigError(f"第 {idx + 1} 条规则解析选项无法等价转换，请使用原生导入")
+        kind, separator, value = body.partition(",")
+        kind, value = kind.strip().upper(), value.strip()
+        if kind in {"MATCH", "FINAL"} and not separator and not no_resolve:
+            fallback = resolve_target(raw_target)
+            if fallback == "REJECT":
+                raise ConfigError("便携配置不支持 REJECT 兜底，请使用原生导入")
+            has_fallback = True
             continue
-        parts = [p.strip() for p in line.strip().split(",")]
-        kind = parts[0].upper()
-        if kind in {"MATCH", "FINAL"} and len(parts) >= 2:
-             candidate_fb = resolve_target(parts[1])
-             fallback = "DIRECT" if candidate_fb == "REJECT" else candidate_fb
-             continue
-        if len(parts) < 3:
-            continue
-        value = parts[1]
-        raw_target = parts[-2] if parts[-1] in {"no-resolve", "src", "dst"} and len(parts) >= 4 else parts[2]
+        if not separator or kind not in MATCHES:
+            raise ConfigError(f"第 {idx + 1} 条规则无法等价转换，请使用原生导入保留完整规则")
         target = resolve_target(raw_target)
+        contains_ip = kind.startswith("IP-CIDR") or (kind == "RULE-SET" and any(entry.startswith(("IP-CIDR,", "IP-CIDR6,")) for item in profile["library"] if item["id"] == rule_provider_ids.get(value) for entry in item["entries"]))
+        if contains_ip != no_resolve:
+            raise ConfigError(f"第 {idx + 1} 条规则的 no-resolve 语义无法等价转换，请使用原生导入")
         if kind == "RULE-SET" and value in rule_provider_ids:
             lid = rule_provider_ids[value]
             policy_order.append({
@@ -496,29 +518,18 @@ def _convert_mihomo_to_profile(config: dict, extra_files: dict[str, bytes], wiri
             try:
                 Profile({"schema_version": 1, "library": [{"id": "chk", "name": "chk", "kind": "classical", "entries": [entry]}], "fallback": "DIRECT"})
             except ConfigError:
-                continue
-            key = (target, kind)
-            if key not in grouped_inline:
-                lid = f"l_inline_{len(grouped_inline) + 1}"
-                grouped_inline[key] = []
-                lib_name = f"导入规则 · {raw_target} ({kind})"[:80]
-                profile["library"].append({"id": lid, "name": lib_name, "kind": "classical", "entries": grouped_inline[key]})
-                policy_order.append({
-                    "id": f"p_{idx + 1}",
-                    "name": lib_name,
-                    "type": "RULE-SET",
-                    "value": lid,
-                    "target": target,
-                    "enabled": True,
-                })
-            if entry not in grouped_inline[key]:
-                grouped_inline[key].append(entry)
+                raise ConfigError(f"第 {idx + 1} 条规则匹配值无效，未创建空间") from None
+            # Do not merge nonadjacent rules: intervening first matches matter.
+            lid = f"l_inline_{idx + 1}"
+            lib_name = f"导入规则 {idx + 1} ({kind})"
+            profile["library"].append({"id": lid, "name": lib_name, "kind": "classical", "entries": [entry]})
+            policy_order.append({"id": f"p_{idx + 1}", "name": lib_name, "type": "RULE-SET", "value": lid, "target": target, "enabled": True})
+        else:
+            raise ConfigError(f"第 {idx + 1} 条规则引用的来源没有可转换快照，请使用原生导入")
 
     profile["policies"] = policy_order
-    if fallback == "DIRECT":
-        enabled_groups = [g["id"] for g in profile["groups"] if g.get("enabled", True)]
-        if enabled_groups:
-            fallback = enabled_groups[0]
+    if not has_fallback:
+        raise ConfigError("缺少明确的 MATCH / FINAL 兜底，请使用原生导入")
     profile["fallback"] = fallback
     return Profile(profile).data
 
@@ -572,7 +583,7 @@ def _convert_singbox_to_profile(config: dict, extra_files: dict[str, bytes], wir
     if settings.get("mixed_port", 17890) == settings.get("dns_port", 1053):
         settings["dns_port"] = 1053 if settings["mixed_port"] != 1053 else 5353
 
-    tag_map: dict[str, str] = {"DIRECT": "DIRECT", "direct": "DIRECT", "REJECT": "REJECT", "block": "REJECT"}
+    tag_map: dict[str, str] = {}
     seen_node_ids: set[str] = set()
     raw_groups: list[tuple[str, dict]] = []
 
@@ -588,8 +599,8 @@ def _convert_singbox_to_profile(config: dict, extra_files: dict[str, bytes], wir
         elif otype in SUPPORTED:
             try:
                 node = normalize(singbox_node(ob), "manual")
-            except ConfigError:
-                continue
+            except (ValueError, TypeError, AttributeError, KeyError):
+                raise ConfigError("有 sing-box 节点无法完整转换，未创建空间") from None
             if node["id"] in seen_node_ids:
                 node["id"] = "n_" + hashlib.sha256((node["id"] + "\0" + tag).encode("utf-8")).hexdigest()[:20]
             seen_node_ids.add(node["id"])
@@ -599,6 +610,8 @@ def _convert_singbox_to_profile(config: dict, extra_files: dict[str, bytes], wir
             gid = f"g_{len(raw_groups) + 1}_" + hashlib.sha256(tag.encode("utf-8")).hexdigest()[:10]
             tag_map[tag] = gid
             raw_groups.append((gid, ob))
+        else:
+            raise ConfigError("包含不支持的 sing-box 出口，不能静默丢弃或替换")
 
     node_ids = {n["id"] for n in profile["nodes"]}
     group_ids = {gid for gid, _ in raw_groups}
@@ -611,7 +624,7 @@ def _convert_singbox_to_profile(config: dict, extra_files: dict[str, bytes], wir
         for member_tag in ob.get("outbounds") or []:
             mapped = tag_map.get(str(member_tag))
             if not mapped or mapped in BUILTINS or mapped == gid:
-                continue
+                raise ConfigError("sing-box 组成员无法等价转换，不能删减候选出口")
             if mapped in node_ids and mapped not in nodes:
                 nodes.append(mapped)
                 order.append(mapped)
@@ -646,7 +659,7 @@ def _convert_singbox_to_profile(config: dict, extra_files: dict[str, bytes], wir
 
     for idx, rs in enumerate(route.get("rule_set") or []):
         if not isinstance(rs, dict) or not isinstance(rs.get("tag"), str):
-            continue
+            raise ConfigError("sing-box 规则来源需要带 tag 的对象")
         rtag = rs["tag"].strip()
         lid = f"l_rs_{idx + 1}_" + hashlib.sha256(rtag.encode("utf-8")).hexdigest()[:10]
         entries = []
@@ -658,16 +671,16 @@ def _convert_singbox_to_profile(config: dict, extra_files: dict[str, bytes], wir
                     parsed_item, _ = parse_rules(body, "auto", root)
                     entries = parsed_item["entries"]
                 except ConfigError:
-                    entries = []
+                    raise ConfigError("sing-box 规则缓存无法完整转换，未创建空间") from None
         elif isinstance(rs.get("rules"), list):
             try:
                 body = json.dumps({"version": 3, "rules": rs["rules"]}).encode("utf-8")
                 parsed_item, _ = parse_rules(body, "sing-box", root)
                 entries = parsed_item["entries"]
             except ConfigError:
-                entries = []
+                raise ConfigError("sing-box 规则集无法完整转换，未创建空间") from None
         if not entries:
-            continue
+            raise ConfigError("sing-box 规则来源缺少可转换快照，请先提供完整缓存")
         lib_item = {"id": lid, "name": rtag[:100], "kind": "classical", "entries": entries}
         url = str(rs.get("url") or "").strip()
         parsed_url = urlsplit(url)
@@ -681,12 +694,12 @@ def _convert_singbox_to_profile(config: dict, extra_files: dict[str, bytes], wir
                     "interval_minutes": 1440,
                 })
             except ConfigError:
-                pass
+                raise ConfigError("sing-box 规则来源设置无效，未创建空间") from None
         profile["library"].append(lib_item)
         ruleset_map[rtag] = lid
 
     def resolve_target(rule_dict: dict) -> str:
-        if rule_dict.get("action") == "reject" or rule_dict.get("outbound") in {"block", "REJECT"}:
+        if rule_dict.get("action") == "reject":
             return "REJECT"
         mapped = tag_map.get(str(rule_dict.get("outbound") or ""))
         if mapped in BUILTINS:
@@ -697,8 +710,7 @@ def _convert_singbox_to_profile(config: dict, extra_files: dict[str, bytes], wir
                 return mapped
         if mapped in node_ids:
             return mapped
-        enabled_groups = [g["id"] for g in profile["groups"] if g.get("enabled", True)]
-        return enabled_groups[0] if enabled_groups else "DIRECT"
+        raise ConfigError("sing-box 规则出口不存在或已停用，不能替换为其他出口")
 
     field_map = {
         "domain": "DOMAIN",
@@ -711,75 +723,54 @@ def _convert_singbox_to_profile(config: dict, extra_files: dict[str, bytes], wir
     policies = []
     for idx, rule in enumerate(route.get("rules") or []):
         if not isinstance(rule, dict):
-            continue
-        if rule.get("action") in {"sniff", "hijack-dns"} or rule.get("protocol") == "dns":
-            continue
+            raise ConfigError("sing-box 路由规则需要对象")
+        if set(rule) - {*field_map, "rule_set", "action", "outbound"} or rule.get("action", "route") not in {"route", "reject"}:
+            raise ConfigError(f"第 {idx + 1} 条 sing-box 规则无法等价转换，未创建空间")
         target = resolve_target(rule)
+        condition_groups = []
         rs_refs = rule.get("rule_set")
         if isinstance(rs_refs, str):
             rs_refs = [rs_refs]
-        if isinstance(rs_refs, list):
+        if rs_refs is not None:
+            if not isinstance(rs_refs, list) or not rs_refs:
+                raise ConfigError("sing-box rule_set 引用需要非空列表")
+            conditions = []
             for ref in rs_refs:
-                if ref in ruleset_map:
-                    policies.append({
-                        "id": f"p_{len(policies) + 1}",
-                        "name": str(ref)[:80],
-                        "type": "RULE-SET",
-                        "value": ruleset_map[ref],
-                        "target": target,
-                        "enabled": True,
-                    })
-        entries = []
+                if not isinstance(ref, str) or ref not in ruleset_map:
+                    raise ConfigError("sing-box 规则引用了没有快照的来源")
+                conditions.append({"type": "RULE-SET", "value": ruleset_map[ref]})
+            condition_groups.append({"operator": "or", "conditions": conditions})
+        domain_conditions, ip_conditions = [], []
         for field, kind in field_map.items():
             vals = rule.get(field)
             if isinstance(vals, str):
                 vals = [vals]
-            if isinstance(vals, list):
+            if vals is not None:
+                if not isinstance(vals, list) or not vals or any(not isinstance(v, str) or not v.strip() for v in vals):
+                    raise ConfigError("sing-box 匹配值需要非空文本列表")
                 for v in vals:
-                    if isinstance(v, str) and v.strip():
-                        actual_kind = "IP-CIDR6" if kind == "IP-CIDR" and ":" in v else kind
-                        entries.append(f"{actual_kind},{v.strip()}")
-        if entries:
-            valid_entries = []
-            for entry in entries:
-                try:
-                    Profile({"schema_version": 1, "library": [{"id": "chk", "name": "chk", "kind": "classical", "entries": [entry]}], "fallback": "DIRECT"})
-                    valid_entries.append(entry)
-                except ConfigError:
-                    continue
-            if valid_entries:
-                lid = f"l_sb_{idx + 1}"
-                name = f"分流规则 {len(policies) + 1}"
-                profile["library"].append({"id": lid, "name": name, "kind": "classical", "entries": valid_entries})
-                policies.append({
-                    "id": f"p_{len(policies) + 1}",
-                    "name": name,
-                    "type": "RULE-SET",
-                    "value": lid,
-                    "target": target,
-                    "enabled": True,
-                })
+                    actual_kind = "IP-CIDR6" if kind == "IP-CIDR" and ":" in v else kind
+                    condition = {"type": actual_kind, "value": v.strip()}
+                    (ip_conditions if kind == "IP-CIDR" else domain_conditions).append(condition)
+        for conditions in (domain_conditions, ip_conditions):
+            if conditions:
+                condition_groups.append({"operator": "or", "conditions": conditions})
+        if not condition_groups:
+            raise ConfigError("sing-box 无匹配条件的路由无法转换为普通策略，请明确 final 兜底")
+        policies.append({"id": f"p_{idx + 1}", "name": f"分流规则 {idx + 1}", "type": "LOGICAL", "group_operator": "and", "condition_groups": condition_groups, "target": target, "enabled": True})
 
     profile["policies"] = policies
-    final_mapped = tag_map.get(str(route.get("final") or ""))
-    fallback = "DIRECT"
-    if final_mapped in group_ids:
-        gobj = next((g for g in profile["groups"] if g["id"] == final_mapped), None)
-        if gobj and gobj.get("enabled", True):
-            fallback = final_mapped
-    elif final_mapped in node_ids:
-        fallback = final_mapped
-    if fallback == "DIRECT":
-        enabled_groups = [g["id"] for g in profile["groups"] if g.get("enabled", True)]
-        if enabled_groups:
-            fallback = enabled_groups[0]
+    first_tag = (config.get("outbounds") or [{}])[0].get("tag")
+    fallback = resolve_target({"outbound": route.get("final") or first_tag})
+    if fallback == "REJECT":
+        raise ConfigError("便携配置不支持 REJECT 兜底，未创建空间")
     profile["fallback"] = fallback
     return Profile(profile).data
 
 
-def _attach_localdns_to_portable(profile: dict, localdns_docs: dict[str, str], localdns_assets: dict[str, str], root: Path) -> None:
+def _attach_localdns_to_portable(profile: dict, localdns_docs: dict[str, str], localdns_assets: dict[str, str], root: Path) -> bool:
     if "localdns/config/localdns.json" not in localdns_docs:
-        return
+        return False
     try:
         from .mosdns_import import import_localdns
         temp_profile = {
@@ -794,11 +785,19 @@ def _attach_localdns_to_portable(profile: dict, localdns_docs: dict[str, str], l
         }
         migrated = import_localdns(temp_profile, root)
         mosdns_cfg = migrated["settings"]
-        if isinstance(mosdns_cfg.get("migration"), dict):
-            mosdns_cfg["migration"]["reviewed"] = True
         profile["mosdns"] = mosdns_cfg
+        return True
     except Exception:
-        pass
+        raise ConfigError("LocalDNS 未能生成迁移草稿，未创建空间；请使用原生导入保留原件") from None
+
+
+def _portable_profile(converter, config, files, wiring, root):
+    try:
+        return converter(config, files, wiring, root)
+    except ConfigError:
+        raise
+    except (ValueError, TypeError, AttributeError, KeyError, IndexError, RecursionError):
+        raise ConfigError("配置字段类型或引用无效，未创建空间；Mihomo 配置可改用原生导入保留原件") from None
 
 
 def import_configuration_space(spaces, request: dict, root: Path) -> dict:
@@ -915,13 +914,15 @@ def import_configuration_space(spaces, request: dict, root: Path) -> dict:
                         "localdns_attached": has_localdns or native_cfg.get("format") == "mihomo-localdns-v1",
                     },
                 }
+            if not isinstance(parsed_json.get("settings", {}), dict):
+                raise ConfigError("Profile settings 需要对象，未创建空间")
             if wiring.get("mixed_port"):
                 parsed_json.setdefault("settings", {})["mixed_port"] = wiring["mixed_port"]
             if wiring.get("dns_port"):
                 parsed_json.setdefault("settings", {})["dns_port"] = wiring["dns_port"]
             if wiring.get("socks5"):
                 parsed_json.setdefault("settings", {})["dns_socks5"] = wiring["socks5"]
-            _attach_localdns_to_portable(parsed_json, localdns_docs, localdns_assets, root)
+            attached = _attach_localdns_to_portable(parsed_json, localdns_docs, localdns_assets, root)
             result = spaces.import_profile(
                 parsed_json,
                 name,
@@ -939,14 +940,14 @@ def import_configuration_space(spaces, request: dict, root: Path) -> dict:
                     "mode": "portable",
                     "nodes": len(parsed_json.get("nodes", [])),
                     "groups": len(parsed_json.get("groups", [])),
-                    "localdns_attached": has_localdns,
+                    "localdns_attached": attached,
                 },
             }
 
         # 2. sing-box JSON
         if any(k in parsed_json for k in ("outbounds", "route", "inbounds", "dns")):
-            profile = _convert_singbox_to_profile(parsed_json, remaining, wiring, root)
-            _attach_localdns_to_portable(profile, localdns_docs, localdns_assets, root)
+            profile = _portable_profile(_convert_singbox_to_profile, parsed_json, remaining, wiring, root)
+            attached = _attach_localdns_to_portable(profile, localdns_docs, localdns_assets, root)
             result = spaces.import_profile(
                 profile,
                 name,
@@ -964,7 +965,7 @@ def import_configuration_space(spaces, request: dict, root: Path) -> dict:
                     "mode": "portable",
                     "nodes": len(profile.get("nodes", [])),
                     "groups": len(profile.get("groups", [])),
-                    "localdns_attached": has_localdns,
+                    "localdns_attached": attached,
                 },
             }
 
@@ -980,12 +981,13 @@ def import_configuration_space(spaces, request: dict, root: Path) -> dict:
     ):
         raise ConfigError("无法识别该 YAML 文件；请上传有效的 Mihomo / Clash 配置文件")
 
-    has_providers = bool(parsed_yaml.get("proxy-providers") or parsed_yaml.get("rule-providers") or localdns_docs)
-    use_portable = mode == "portable" or (mode == "auto" and not has_providers)
+    # Automatic import preserves the authoritative native document, including
+    # unsupported rules and fields. Portable conversion is an explicit choice.
+    use_portable = mode == "portable"
     if use_portable:
         try:
-            profile = _convert_mihomo_to_profile(parsed_yaml, remaining, wiring, root)
-            _attach_localdns_to_portable(profile, localdns_docs, localdns_assets, root)
+            profile = _portable_profile(_convert_mihomo_to_profile, parsed_yaml, remaining, wiring, root)
+            attached = _attach_localdns_to_portable(profile, localdns_docs, localdns_assets, root)
             result = spaces.import_profile(
                 profile,
                 name,
@@ -1003,7 +1005,7 @@ def import_configuration_space(spaces, request: dict, root: Path) -> dict:
                     "mode": "portable",
                     "nodes": len(profile.get("nodes", [])),
                     "groups": len(profile.get("groups", [])),
-                    "localdns_attached": has_localdns,
+                    "localdns_attached": attached,
                 },
             }
         except ConfigError:

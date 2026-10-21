@@ -1284,7 +1284,7 @@ const DEFAULT_PRESET_RULES=[
   {key:'adblock',name:'广告与追踪拦截',pill:'🛡️ 广告拦截',desc:'🛡️ 广告拦截 → REJECT',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-ads-all.yaml',ip_url:'',default_region:'reject'}
 ];
 let spacePresetsCache={regions:DEFAULT_PRESET_REGIONS,rules:DEFAULT_PRESET_RULES,controllers:{},links_by_space:{}};
-async function refreshSpacePresets(){
+async function refreshSpacePresets(required=false){
   try{
     const res=await api('/api/spaces/presets');
     if(res&&typeof res==='object'){
@@ -1295,7 +1295,7 @@ async function refreshSpacePresets(){
         links_by_space:res.links_by_space||{}
       };
     }
-  }catch{}
+  }catch(error){if(required)throw error}
   return spacePresetsCache;
 }
 async function copyTextSafe(text,okMsg='已复制到剪贴板。'){
@@ -1303,11 +1303,11 @@ async function copyTextSafe(text,okMsg='已复制到剪贴板。'){
     if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);
     else{
       const area=document.createElement('textarea');area.value=text;area.style.position='fixed';area.style.opacity='0';
-      document.body.append(area);area.focus();area.select();document.execCommand('copy');area.remove();
+      document.body.append(area);area.focus();area.select();const copied=document.execCommand('copy');area.remove();if(!copied)throw Error('copy failed');
     }
     toast(okMsg);
   }catch{
-    toast('复制失败，请手动复制：'+text);
+    toast('复制失败，请手动选择页面中显示的内容复制。');
   }
 }
 async function copySpaceSubscriptionDirect(targetSpaceId){
@@ -1335,7 +1335,8 @@ async function copySpaceSubscriptionDirect(targetSpaceId){
     toast(error.message);
   }
 }
-function openClientControllerModal(targetSpaceId){
+async function openClientControllerModal(targetSpaceId){
+  try{await refreshSpacePresets(true)}catch(error){toast('未能读取控制器配置，请重试：'+error.message);return}
   const s=(spaceCatalog?.spaces||[]).find(item=>item.id===targetSpaceId)||activeSpace();
   if(!s)return;
   const ctrl=spacePresetsCache.controllers?.[s.id]||{enabled:false,url:'',secret:''};
@@ -1344,8 +1345,9 @@ function openClientControllerModal(targetSpaceId){
     <label class="check-row" style="margin:10px 0"><input type="checkbox" id="cc-enabled" ${ctrl.enabled?'checked':''}>启用保存后自动热重载推送</label>
     <div class="fields">
       <label class="field">Mihomo External Controller 地址<input id="cc-url" type="url" placeholder="例如：http://192.168.1.2:9090" value="${esc(ctrl.url||'')}"><small>对应 Mihomo 配置中的 <code>external-controller</code> 地址。</small></label>
-      <label class="field">Controller Secret 密钥（可选）<input id="cc-secret" type="password" placeholder="若未设置 secret 可留空" value="${esc(ctrl.secret||'')}"><small>对应 Mihomo 配置中的 <code>secret</code> 字段。</small></label>
+      <label class="field">Controller Secret 密钥（可选）<input id="cc-secret" type="password" autocomplete="new-password" placeholder="${ctrl.has_secret?'已配置；留空保持原值':'未配置；按需填写'}"><small>留空保持已有密钥；填写后替换。</small></label>
     </div>
+    ${ctrl.has_secret?'<label class="check-row"><input type="checkbox" id="cc-clear-secret">清除已保存的 Secret</label>':''}
     ${ctrl.last_status?`<p class="preview-note">上次连接状态：<strong>${esc(ctrl.last_status)}</strong>${ctrl.last_error?' · '+esc(ctrl.last_error):''}</p>`:''}
     <p id="cc-error" class="error-message" role="alert"></p>
     <div class="dialog-actions">
@@ -1360,7 +1362,7 @@ function openClientControllerModal(targetSpaceId){
     try{
       const enabled=$('#cc-enabled').checked,url=$('#cc-url').value.trim(),secret=$('#cc-secret').value.trim();
       if(enabled&&!url)throw Error('启用自动热重载时，请填写客户端 Controller 地址（如 http://192.168.1.2:9090）。');
-      const saved=await api('/api/spaces/client-controller',{space_id:s.id,enabled,url,secret});
+      const saved=await api('/api/spaces/client-controller',{space_id:s.id,enabled,url,secret,clear_secret:$('#cc-clear-secret')?.checked===true});
       spacePresetsCache.controllers??={};
       spacePresetsCache.controllers[s.id]=saved;
       $('#dialog').close();
@@ -1372,16 +1374,19 @@ function openClientControllerModal(targetSpaceId){
     }
   };
 }
-let hermesFreshToken=null;
+let hermesFreshToken=null,hermesFreshCommand=null,hermesRenderSerial=0;
+window.addEventListener('hashchange',()=>{if(page!=='hermes'){hermesFreshToken=null;hermesFreshCommand=null;hermesRenderSerial++}});
 async function renderHermesPage(){
+  const serial=++hermesRenderSerial,current=()=>page==='hermes'&&serial===hermesRenderSerial;
   $('#content').innerHTML='<div class="panel"><p class="preview-note">正在读取 Hermes 接入状态…</p></div>';
   let status={configured:false,prefix:null,created_at:null,last_used_at:null},loadError='';
   try{status=await api('/api/integrations/hermes')}catch(error){loadError=error.message}
+  if(!current())return;
   const paint=()=>{
+    if(!current())return;
     const baseUrl=location.origin;
-    const tokenDisplay=hermesFreshToken||'<点击上方按钮生成密钥后自动填入>';
-    const oneLineCmd=`curl -fsSL "${baseUrl}/api/setup/hermes_installer.py" | YOMESH_URL="${baseUrl}" YOMESH_TOKEN="${tokenDisplay}" python3 -`;
-    const mcpEndpoint=`${baseUrl}/mcp?token=${tokenDisplay}`;
+    const oneLineCmd=hermesFreshCommand||'生成接入密钥后显示校验安装命令。';
+    const mcpEndpoint=`${baseUrl}/mcp`;
     const manualYaml=`mcp_servers:\n  yomesh:\n    command: python3\n    args:\n      - /root/.local/share/yomesh/yomesh_hermes_mcp.py\n      - --config\n      - /root/.config/yomesh/hermes.json\n    enabled: true`;
     $('#content').innerHTML=`<div id="hermes-integration-panel" style="max-width:860px">
       <div class="panel" style="margin-bottom:16px">
@@ -1398,10 +1403,10 @@ async function renderHermesPage(){
       </div>
       <div class="panel" style="margin-bottom:16px">
         <div class="section-title">
-          <h3>第 2 步（方式 A）：在运行 Hermes 的机器终端执行（一行自动配好）</h3>
+          <h3>第 2 步（方式 A）：在运行 Hermes 的机器终端执行安装命令</h3>
           ${hermesFreshToken?badge('已填入最新密钥 · 请复制执行','accent'):badge('等待生成新密钥')}
         </div>
-        <p class="preview-note" style="margin-top:6px">${hermesFreshToken?'复制下方命令到运行 Hermes 的服务器终端粘贴执行，将自动下载 MCP 脚本、写入 ~/.hermes/config.yaml 并运行 hermes mcp test yomesh 连通性自检：':'请先点击第 1 步中的「一键生成密钥 & 安装命令」，下方命令会自动填入一次性完整密钥：'}</p>
+        <p class="preview-note" style="margin-top:6px">${hermesFreshToken?'命令会先校验安装器与 MCP 脚本的 SHA-256，再更新 Hermes 配置。请从可信工作台复制，执行后清理终端历史中的密钥。':'请先生成接入密钥，再复制安装命令。完整密钥只在本次页面中显示。'}</p>
         <pre class="code-preview mono" id="hm-cmd" style="white-space:pre-wrap;word-break:break-all;margin:10px 0">${esc(oneLineCmd)}</pre>
         <div class="filter-row">
           <button type="button" class="button ${hermesFreshToken?'primary':''}" id="hm-copy-cmd" ${hermesFreshToken?'':'disabled'}>复制一键安装命令</button>
@@ -1412,10 +1417,12 @@ async function renderHermesPage(){
           <h3>第 2 步（方式 B）：Streamable HTTP 标准 MCP 地址（免装脚本直连）</h3>
           ${badge('POST /mcp · JSON-RPC 2.0','accent')}
         </div>
-        <p class="preview-note" style="margin-top:6px">支持 Streamable HTTP 的 MCP 客户端（如 Claude Code、Cursor、Cherry Studio 等）无需安装本地脚本，直接填入以下 HTTP MCP 端点即可：</p>
+        <p class="preview-note" style="margin-top:6px">在 MCP 客户端填写以下地址，并单独设置 Authorization 请求头。远程连接请使用 HTTPS；不要把密钥放入 URL。</p>
         <pre class="code-preview mono" id="hm-mcp-url" style="white-space:pre-wrap;word-break:break-all;margin:10px 0">${esc(mcpEndpoint)}</pre>
+        <label class="field">Authorization 请求头<input id="hm-auth-header" type="password" readonly autocomplete="off" value="${esc(hermesFreshToken?'Bearer '+hermesFreshToken:'')}" placeholder="生成密钥后显示"></label>
         <div class="filter-row">
           <button type="button" class="button" id="hm-copy-mcp" ${hermesFreshToken?'':'disabled'}>复制 HTTP MCP 地址</button>
+          <button type="button" class="button" id="hm-copy-auth" ${hermesFreshToken?'':'disabled'}>复制 Authorization 请求头</button>
         </div>
       </div>
       <div class="panel">
@@ -1440,21 +1447,25 @@ async function renderHermesPage(){
     $('#hm-rotate').onclick=async e=>{
       e.target.disabled=true;
       try{
-        const res=await api('/api/integrations/hermes/rotate',{});
-        status=res;hermesFreshToken=res.token;loadError='';paint();
+        const res=await api('/api/integrations/hermes/rotate',{base_url:location.origin});
+        if(!current())return;
+        hermesFreshCommand=res.installation_command;hermesFreshToken=res.token;
+        status={configured:res.configured,prefix:res.prefix,created_at:res.created_at,last_used_at:res.last_used_at};loadError='';paint();
         toast('已生成新的 Hermes 一键安装命令与 HTTP MCP 地址。');
-      }catch(err){$('#hm-error').textContent=err.message;e.target.disabled=false}
+      }catch(err){if(current()){$('#hm-error').textContent=err.message;e.target.disabled=false}}
     };
     if($('#hm-revoke'))$('#hm-revoke').onclick=async e=>{
       e.target.disabled=true;
       try{
         status=await api('/api/integrations/hermes/revoke',{});
-        hermesFreshToken=null;loadError='';paint();
+        if(!current())return;
+        hermesFreshToken=null;hermesFreshCommand=null;loadError='';paint();
         toast('已停用 Hermes 接入密钥。');
-      }catch(err){$('#hm-error').textContent=err.message;e.target.disabled=false}
+      }catch(err){if(current()){$('#hm-error').textContent=err.message;e.target.disabled=false}}
     };
     if($('#hm-copy-cmd'))$('#hm-copy-cmd').onclick=()=>copyTextSafe(oneLineCmd,'一键安装命令已复制，去 Hermes 终端粘贴执行即可。');
     if($('#hm-copy-mcp'))$('#hm-copy-mcp').onclick=()=>copyTextSafe(mcpEndpoint,'Streamable HTTP MCP 地址已复制。');
+    if($('#hm-copy-auth'))$('#hm-copy-auth').onclick=()=>copyTextSafe('Bearer '+hermesFreshToken,'Authorization 请求头已复制。');
   };
   paint();
 }

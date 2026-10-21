@@ -565,7 +565,7 @@ class HermesService:
                 "result": {
                     "protocolVersion": client_proto,
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "yomesh-hermes-mcp", "version": "0.17.2"},
+                    "serverInfo": {"name": "yomesh-hermes-mcp", "version": "0.17.3"},
                 },
             }
         if method == "notifications/initialized":

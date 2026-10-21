@@ -1,6 +1,8 @@
 """Tests for importing Mihomo YAML, sing-box JSON, ZIP archives, and LocalDNS configurations."""
 from __future__ import annotations
 
+from copy import deepcopy
+
 import base64
 import io
 import json
@@ -148,7 +150,7 @@ class ConfigImportTests(unittest.TestCase):
                 {
                     "name": "Mihomo 通用导入",
                     "filename": "mihomo.yaml",
-                    "content": MIHOMO_PORTABLE_YAML,
+                    "content": MIHOMO_PORTABLE_YAML.replace("      - DIRECT\n", ""),
                     "mode": "portable",
                     "draft": True,
                     "revision": revision,
@@ -177,20 +179,25 @@ class ConfigImportTests(unittest.TestCase):
             with zipfile.ZipFile(localdns_zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr(
                     "localdns/config/localdns.json",
-                    json.dumps({"dns": {"listen": ["127.0.0.1:5353"]}}),
+                    json.dumps({"dns": {"udp_listen": "127.0.0.1:5353", "tcp_listen": "127.0.0.1:5353"}}),
                 )
                 zf.writestr(
                     "localdns/config/settings/overrides.json",
                     json.dumps({"socks5": "127.0.0.1:7899", "ecs": "1.2.4.0/24"}),
                 )
+                zf.writestr("localdns/config/upstreams/foreign.json", json.dumps({"upstreams": [{"addr": "tcp://1.1.1.1", "enabled": True}]}))
             localdns_b64 = base64.b64encode(localdns_zip_buf.getvalue()).decode("ascii")
+            sample = deepcopy(SINGBOX_SAMPLE_JSON)
+            sample["outbounds"][0]["outbounds"].remove("DIRECT")
+            sample["route"]["rules"] = sample["route"]["rules"][2:]
+            sample["route"]["rule_set"] = [{"tag": "ai_rules", "type": "inline", "rules": [{"domain_suffix": ["example.test"]}]}]
 
             result = import_configuration_space(
                 spaces,
                 {
                     "name": "sing-box + LocalDNS",
                     "filename": "sing-box.json",
-                    "content": json.dumps(SINGBOX_SAMPLE_JSON),
+                    "content": json.dumps(sample),
                     "localdns_filename": "localdns.zip",
                     "localdns_base64": localdns_b64,
                     "mode": "auto",
@@ -207,6 +214,9 @@ class ConfigImportTests(unittest.TestCase):
             self.assertEqual(profile["settings"]["mixed_port"], 7899)
             self.assertEqual(profile["settings"]["dns_port"], 5353)
             self.assertEqual(profile["settings"]["dns_socks5"], "127.0.0.1:7899")
+            self.assertFalse(profile["mosdns"]["migration"]["reviewed"])
+            # The test explicitly reviews the draft before combined export.
+            profile["mosdns"]["migration"]["reviewed"] = True
 
             sb_bundle = compile_bundle(profile, "sing-box", rule_output="inline")
             mh_bundle = compile_bundle(profile, "mihomo", rule_output="inline")

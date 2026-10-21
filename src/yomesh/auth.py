@@ -10,6 +10,7 @@ import re
 import secrets
 import threading
 import time
+import tempfile
 from http.cookies import SimpleCookie
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from .model import ConfigError
 SESSION_COOKIE = "yomesh_session"
 SESSION_TTL_SECONDS = 30 * 24 * 3600
 PBKDF2_ITERATIONS = 200_000
+MIN_PASSWORD_LENGTH = 12
 
 
 class AuthUnavailable(OSError):
@@ -50,7 +52,9 @@ class AuthStore:
             return
         if os.environ.get("YOMESH_REQUIRE_AUTH") == "1":
             user = os.environ.get("YOMESH_INIT_USER", "admin").strip() or "admin"
-            password = os.environ.get("YOMESH_INIT_PASSWORD", "admin123")
+            password = os.environ.get("YOMESH_INIT_PASSWORD", "")
+            if len(password) < MIN_PASSWORD_LENGTH:
+                raise ConfigError("启用登录必须显式设置 YOMESH_INIT_PASSWORD，至少 12 个字符；未创建默认账号")
             self._write_credentials(user, password, enabled=True)
 
     def _read(self) -> dict:
@@ -85,15 +89,23 @@ class AuthStore:
             "session_secret": secret,
             "updated_at": int(time.time()),
         }
-        tmp = self.path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        try:
-            os.chmod(tmp, 0o600)
-        except OSError:
-            pass
-        tmp.replace(self.path)
+        self._save(payload)
         self._configured = True
         return payload
+
+    def _save(self, payload: dict) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(prefix=".auth-", dir=self.path.parent)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                json.dump(payload, output, ensure_ascii=False, indent=2)
+                output.write("\n")
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, self.path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
     def is_enabled(self) -> bool:
         with self._lock:
@@ -177,8 +189,8 @@ class AuthStore:
         user = (new_username or "").strip()
         if not 1 <= len(user) <= 32:
             raise ConfigError("用户名长度需在 1 至 32 个字符之间")
-        if not new_password or len(new_password) < 4:
-            raise ConfigError("新密码长度至少需要 4 个字符")
+        if not new_password or len(new_password) < MIN_PASSWORD_LENGTH:
+            raise ConfigError("新密码长度至少需要 12 个字符")
         with self._lock:
             data = self._read()
             if data.get("enabled"):
@@ -204,6 +216,4 @@ class AuthStore:
                 raise ConfigError("当前密码不正确")
             data["enabled"] = False
             data["updated_at"] = int(time.time())
-            tmp = self.path.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-            tmp.replace(self.path)
+            self._save(data)
