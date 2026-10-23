@@ -1477,7 +1477,13 @@ let spacePresetsLoadedOnce=false;
 function paintSpaceCards(){
   if(!spacePresetsLoadedOnce){
     spacePresetsLoadedOnce=true;
-    refreshSpacePresets().then(()=>{if(page==='spaces')paintSpaceCards()});
+    refreshSpacePresets(true).then(()=>{if(page==='spaces')paintSpaceCards()}).catch(error=>{
+      if(page!=='spaces')return;
+      const status=$('#space-list-status');
+      if(status)status.innerHTML=`控制器与订阅链接状态未能加载，下方卡片的绑定状态可能不准确：${esc(error.message)} <button type="button" class="text-button" id="space-presets-retry">重试</button>`;
+      const retry=$('#space-presets-retry');
+      if(retry)retry.onclick=()=>{spacePresetsLoadedOnce=false;paintSpaceCards()};
+    });
   }
   const entries=spaceCatalog?.spaces||[];
   $('#content').innerHTML=`<div class="configuration-overview"><div><h2>Mihomo 配置导入、模板与导出</h2><p>支持直接导入现有 Mihomo YAML 配置，或选用内置的<strong>客户端版本模板</strong> / <strong>服务端版本模板</strong>（已去除 PT 与个人自定义规则）新建配置空间；随时一键导出 <code>mihomo.yaml</code> 或复制持久订阅链接。</p><div class="filter-row" style="margin-top:10px;flex-wrap:wrap"><button type="button" class="button primary" id="space-import-config">📥 导入 Mihomo 配置</button><button type="button" class="button" id="space-template-client">💻 从客户端模板新建</button><button type="button" class="button" id="space-template-server">🖥️ 从服务端模板新建</button><button type="button" class="button" id="space-export-current">📤 导出当前 Mihomo 配置</button><button type="button" class="button" id="space-open-subscription">高级订阅链接设置</button></div></div></div><div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{

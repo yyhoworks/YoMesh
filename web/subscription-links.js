@@ -27,7 +27,8 @@ async function openSubscriptionLink(){
   </form>`);
   let current=savedLink,pending=false;
   if($('#subscription-proxy'))$('#subscription-proxy').value=savedLink?.proxy||activeSpace()?.proxy||'mihomo';
-  $(`#subscription-form input[name=subscription_rules][value=${savedLink?.rule_address||'original'}]`).checked=true;
+  const ruleRadios=$$('#subscription-form input[name=subscription_rules]'),ruleRadio=ruleRadios.find(el=>el.value===(savedLink?.rule_address||'original'))||ruleRadios.find(el=>el.value==='original');
+  if(ruleRadio)ruleRadio.checked=true;
   const dialog=$('#dialog'),prevent=e=>{if(pending)e.preventDefault()};
   dialog.addEventListener('cancel',prevent);dialog.addEventListener('close',()=>dialog.removeEventListener('cancel',prevent),{once:true});
   const busy=value=>{pending=value;$('#close-dialog').disabled=value;$$('#subscription-form button,#subscription-form select,#subscription-form input:not([readonly])').forEach(el=>el.disabled=value)};
@@ -44,9 +45,17 @@ async function openSubscriptionLink(){
 
 const quickCopySubBtn=document.createElement('button');
 quickCopySubBtn.id='quick-copy-subscription';quickCopySubBtn.type='button';quickCopySubBtn.className='button';quickCopySubBtn.textContent='🔗 一键复制订阅';
-quickCopySubBtn.title='一键复制当前方案的持久订阅链接（如未生成则自动创建并复制）';
+quickCopySubBtn.title='一键复制当前方案的持久订阅链接（尚无链接时会先询问，确认后再新建）';
 $('#export').before(quickCopySubBtn);
-quickCopySubBtn.onclick=()=>{if(typeof copySpaceSubscriptionDirect==='function')copySpaceSubscriptionDirect(spaceId);else openSubscriptionLink()};
+quickCopySubBtn.onclick=async()=>{
+  if(typeof copySpaceSubscriptionDirect!=='function'){openSubscriptionLink();return}
+  const cachedLink=()=>(typeof spacePresetsCache==='object'&&spacePresetsCache?spacePresetsCache.links_by_space?.[spaceId]||[]:[]).at(-1);
+  if(!cachedLink()?.url&&typeof refreshSpacePresets==='function'){try{await refreshSpacePresets()}catch{/* 读取失败时按尚无链接处理，下方仍会先确认 */}}
+  if(cachedLink()?.url){copySpaceSubscriptionDirect(spaceId);return}
+  showDialog('新建并复制订阅链接',`<p>「${esc(activeSpace()?.name||'当前方案')}」还没有持久订阅链接。继续将<strong>新建一条长期有效的链接</strong>并复制到剪贴板；持有该链接的人可以读取此配置，请妥善保存。</p><div class="dialog-actions"><button type="button" class="button" id="quick-sub-cancel">取消</button><button type="button" class="button primary" id="quick-sub-confirm">新建并复制</button></div>`);
+  $('#quick-sub-cancel').onclick=()=>$('#dialog').close();
+  $('#quick-sub-confirm').onclick=()=>{$('#dialog').close();copySpaceSubscriptionDirect(spaceId)};
+};
 const subscriptionButton=document.createElement('button');
 subscriptionButton.id='subscription-link';subscriptionButton.type='button';subscriptionButton.className='button';subscriptionButton.textContent='订阅链接';
 subscriptionButton.disabled=true;

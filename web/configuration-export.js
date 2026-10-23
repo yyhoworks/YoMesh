@@ -1,6 +1,16 @@
 'use strict';
 $('#show-plan').onclick=()=>showDialog('配置与导出','<p>代理配置：先设置基础设置与接入设置，再配置节点分组和分流规则（含排序与兜底），完成后导出 Mihomo YAML 或 sing-box JSON。</p><p>DNS 配置：单独设置上游、监听和代理接线，再导出 MosDNS。已导入的设备使用 LocalDNS，保留其原生格式。</p><p>配置按方案保存，下载前检查对应内核；导出不会启动设备服务。</p>');
 
+async function exportErrorMessage(response){
+  const fallback='原生校验未通过。';
+  let text='';
+  try{text=await response.text()}catch{text=''}
+  text=String(text||'').trim();
+  if(!text)return fallback;
+  try{const parsed=JSON.parse(text);if(typeof parsed?.error==='string'&&parsed.error)return parsed.error}catch{/* 非 JSON 响应（如网关错误页）：原样提示响应文本 */}
+  return text.length>300?text.slice(0,300)+'…':text;
+}
+
 async function openConfigurationExport(component='proxy'){
   try{await saveSpaceDrafts()}catch(error){toast(error.message);return}
   if(component==='dns'&&nativeMode()&&!nativeDNSAvailable()&&!data.mosdns){toast('此空间只有 Mihomo 内置 DNS，请在基础设置中编辑。');return}
@@ -33,14 +43,14 @@ async function openConfigurationExport(component='proxy'){
     if($('#export-rule-note'))$('#export-rule-note').textContent=dns?(data.mosdns?'使用本空间独立保存的 MosDNS 规则与上游，不自动转换代理规则。':data.settings?.dns_follow_rules===false?'未跟随代理规则，所有域名使用 DNS 默认上游。':'MosDNS 使用当前方案的域名规则快照；IP 条件保留在代理侧。'):{remote:target()==='mihomo'?'订阅须为 MRS / Clash payload YAML；不兼容格式可选本地文件或内联。':'订阅须为 SRS / rule-set JSON；不兼容格式可选本地文件或内联。',local:'解压后保留 rules/ 目录，并从配置包目录启动内核。',inline:'使用规则当前内容；订阅更新后需重新导出。'}[mode()];
   };
   if($('#export-proxy')){$('#export-proxy').value=native?'mihomo':activeSpace()?.proxy||'mihomo';$('#export-proxy').onchange=()=>{$('#export-adjust-groups').checked=false;invalidate();update()}}
-  if(!native){let preferred=activeSpace()?.rule_output||'inline';if(dns&&preferred==='remote')preferred='local';$(`#native-export-form input[name=rule_output][value=${preferred}]`).checked=true;$$('#native-export-form input[name=rule_output]').forEach(el=>el.onchange=()=>{invalidate();update()})}
+  if(!native){let preferred=activeSpace()?.rule_output||'inline';if(dns&&preferred==='remote')preferred='local';const preferredRadio=$$('#native-export-form input[name=rule_output]').find(el=>el.value===preferred);if(preferredRadio)preferredRadio.checked=true;$$('#native-export-form input[name=rule_output]').forEach(el=>el.onchange=()=>{invalidate();update()})}
   if($('#export-source'))$('#export-source').onchange=()=>{$('#export-file-field').hidden=source()!=='file';$('#export-hint').textContent=source()==='example'?'样例仅用于配置格式验证，不能连接外网。':source()==='file'?'文件仅用于本次导出，不保存到工作区。':'使用当前方案的选用内容。';$('#export-adjust-groups').checked=false;invalidate();update()};
   if($('#export-file'))$('#export-file').onchange=invalidate;$('#export-adjust-groups').onchange=invalidate;
   const request=async()=>{
     const result={component,proxy:target(),rule_output:mode()};
     if(source()==='current')result.use_workspace=true;
     else if(source()==='example')result.profile=await api('/api/example');
-    else{const file=$('#export-file').files[0];if(!file)throw Error('请选择 YoMesh profile JSON 文件。');if(file.size>24*1024*1024)throw Error('文件不能超过 24 MiB。');result.profile=JSON.parse(await file.text())}
+    else{const file=$('#export-file').files[0];if(!file)throw Error('请选择 YoMesh profile JSON 文件。');if(file.size>24*1024*1024)throw Error('文件不能超过 24 MiB。');const fileText=await file.text();try{result.profile=JSON.parse(fileText)}catch{throw Error('所选文件不是有效的 JSON，请选择 YoMesh profile JSON 文件。')}}
     if(!dns&&result.proxy==='sing-box'&&source()==='current'){
       const groups=incompatible(data);if(groups.length&&!$('#export-adjust-groups').checked)throw Error('请选择 Mihomo，或明确勾选仅本次按自动测速导出。');if(groups.length)result.group_mode_overrides=Object.fromEntries(groups.map(g=>[g.id,'url-test']));
     }
@@ -88,13 +98,13 @@ async function openConfigurationExport(component='proxy'){
         }
       }else{
         const response=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json',...workspaceHeaders()},body:JSON.stringify(body)});
-        if(!response.ok)throw Error((await response.json()).error||'原生校验未通过。');
+        if(!response.ok)throw Error(await exportErrorMessage(response));
         const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');
         link.href=url;link.download=(activeSpace()?.name||'yomesh').replace(/[\\/:*?"<>|]/g,'_')+'-'+(dns?engine.toLowerCase():body.proxy)+'.zip';
         link.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
         toast((dns?engine:body.proxy)+' 原生校验通过，已下载独立配置包。');
       }
-    }catch(error){$('#export-error').textContent=error instanceof SyntaxError?'文件不是有效的 JSON。':error.message}
+    }catch(error){$('#export-error').textContent=error.message}
     finally{
       pending=false;$('#close-dialog').disabled=false;controls.forEach(el=>el.disabled=false);
       $('#native-export-submit').disabled=!preflightReady;$('#native-export-preview').disabled=!preflightReady;
