@@ -30,7 +30,7 @@ renderLibrary = function() {
   $$('[data-library-edit]').forEach(b=>b.onclick=()=>editLibrary(b.dataset.libraryEdit));
   $$('[data-library-use]').forEach(b=>b.onclick=()=>editPolicy(null,b.dataset.libraryUse));
   $$('[data-library-usage]').forEach(b=>b.onclick=()=>showLibraryUsage(b.dataset.libraryUsage));
-  $$('[data-library-refresh]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{adoptWorkspace(await api(`/api/library/${b.dataset.libraryRefresh}/refresh`,{}));toast('正在更新规则订阅。')}catch(e){toast(e.message);b.disabled=false}});
+  $$('[data-library-refresh]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{adoptWorkspace(await api(`/api/library/${b.dataset.libraryRefresh}/refresh`,{},undefined,60000));toast('正在更新规则订阅。')}catch(e){toast(e.message);b.disabled=false}});
   $$('[data-library-delete]').forEach(b=>b.onclick=()=>{const l=find('library',b.dataset.libraryDelete);confirmRemoval('删除规则集',`删除「${l.name}」？仍有策略引用时会阻止删除。`,()=>{});$('#remove-confirm').onclick=async e=>{e.target.disabled=true;try{adoptWorkspace(await api(`/api/library/${l.id}/delete`,{revision:liveWorkspace.revision}));$('#dialog').close()}catch(error){$('#remove-error').textContent=error.message;e.target.disabled=false}}});
 };
 

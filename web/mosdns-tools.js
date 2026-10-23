@@ -35,9 +35,9 @@ function mosdnsBindTools(e,busy,fail,change){
  const readText=async text=>{
    if(new Blob([text]).size>16*1024*1024)throw Error('设置 JSON 不能超过 16 MiB。');
    let config;try{config=JSON.parse(text)}catch{throw Error('设置 JSON 格式无效，请修正后重新读入；当前草稿已保留。')}
-   receive(await api('/api/workspace/mosdns/import',{config,revision:e.revision},id));
+   receive(await api('/api/workspace/mosdns/import',{config,revision:e.revision},id,30000));
  };
- if($('#md-import-localdns'))$('#md-import-localdns').onclick=()=>run(async()=>receive(await api('/api/workspace/mosdns/import-localdns',{revision:e.revision},id)));
+ if($('#md-import-localdns'))$('#md-import-localdns').onclick=()=>run(async()=>receive(await api('/api/workspace/mosdns/import-localdns',{revision:e.revision},id,30000)));
  if($('#md-paste'))$('#md-paste').oninput=event=>{e.importText=event.target.value};
  if($('#md-import-paste'))$('#md-import-paste').onclick=()=>run(()=>readText(e.importText||''));
  if($('#md-import'))$('#md-import').onchange=event=>{const file=event.target.files[0];if(file)run(async()=>{if(file.size>16*1024*1024)throw Error('设置 JSON 不能超过 16 MiB。');await readText(await file.text())})};

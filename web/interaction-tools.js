@@ -8,7 +8,7 @@ async function synchronizeToolRevision(scope=spaceId){
     liveWorkspace.revision=snapshot.revision;liveWorkspace.state={...snapshot};
   }
 }
-const toolRequest=async(action,extra={},scope=spaceId)=>{await synchronizeToolRevision(scope);return api('/api/workspace/tools',{action,revision:liveWorkspace.revision,...extra},scope)};
+const toolRequest=async(action,extra={},scope=spaceId)=>{await synchronizeToolRevision(scope);return api('/api/workspace/tools',{action,revision:liveWorkspace.revision,...extra},scope,60000)};
 const toolError=(id,error)=>{const el=$('#'+id);if(el)el.textContent=error.message||String(error)};
 let nativePickedNodes=new Set(),nativeNodeHealth='all',nativePickedScope=null;
 const nativeHistoryOpen=new Set();

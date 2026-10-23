@@ -105,7 +105,7 @@ async function saveConditionSubscription(condition) {
   const busy=on=>{$$('#compound-rule-form button,#compound-rule-form input,#compound-rule-form select,#compound-rule-form textarea').forEach(el=>el.disabled=on);$('#close-dialog').disabled=on};
   busy(true);
   $('[data-save-subscription]').textContent='正在拉取并检查…';
-  try{const state=await api('/api/library/save',{item,revision:liveWorkspace.revision});adoptWorkspace(state,{repaint:false,keepDraft:true});condition.value=item.id;conditionSourceKinds.set(condition,'subscription');subscriptionForms.delete(condition)}
+  try{const state=await api('/api/library/save',{item,revision:liveWorkspace.revision},spaceId,60000);adoptWorkspace(state,{repaint:false,keepDraft:true});condition.value=item.id;conditionSourceKinds.set(condition,'subscription');subscriptionForms.delete(condition)}
   catch(error){values.error=error.message}
   finally{ruleSubscriptionPending=false;busy(false);paintConditionGroups();previewCompoundRule()}
 }

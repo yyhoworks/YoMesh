@@ -13,7 +13,7 @@ let nativePolicyTargets=selected=>{
 async function nativePolicyMutation(request,message='规则已保存。'){
   if(liveWorkspace.saving)throw Error('正在保存，请稍后。');
   const scope=spaceId;liveWorkspace.saving=true;$('#content').inert=true;$('#space-select').disabled=true;
-  try{adoptWorkspace(await api('/api/workspace/native-policy',{...request,revision:liveWorkspace.revision},scope));toast(message);return liveWorkspace.revision}
+  try{adoptWorkspace(await api('/api/workspace/native-policy',{...request,revision:liveWorkspace.revision},scope,60000));toast(message);return liveWorkspace.revision}
   finally{liveWorkspace.saving=false;$('#content').inert=false;$('#space-select').disabled=false;$('#subscription-link').disabled=!liveWorkspace.state}
 }
 function nativeRuleSettings(){
