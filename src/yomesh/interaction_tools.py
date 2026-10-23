@@ -386,6 +386,9 @@ def parse_import(text):
             raise ConfigError("完整配置必须包含非空 rules 列表；不会丢弃其他字段改当单个节点")
         native = {"format": "mihomo-v1", "mihomo": deepcopy(value), "policies": [{"id": "np_" + uuid.uuid4().hex, "text": line, "enabled": True} for line in value["rules"]], "documents": {}, "assets": {}}
         native["mihomo"].pop("rules")
+        if isinstance(native["mihomo"].get("external-ui"), str) and native["mihomo"]["external-ui"].strip():
+            from .native_configuration import normalize_ui_path
+            native["mihomo"]["external-ui"] = normalize_ui_path(native["mihomo"]["external-ui"])
         checked(native)
         return {"kind": "configuration", "configuration": native, "nodes": []}
     if isinstance(value, dict) and isinstance(value.get("proxies"), list):

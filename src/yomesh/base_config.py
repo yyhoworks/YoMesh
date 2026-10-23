@@ -56,6 +56,9 @@ def parse_base(text, target):
             raise ConfigError("sing-box route 需要为对象")
         if set(result["route"]) & {"rules", "rule_set", "final"}:
             raise ConfigError("route.rules / rule_set / final 由分流策略生成，请在工作区编辑")
+    if target == "mihomo" and isinstance(result.get("external-ui"), str) and result["external-ui"].strip():
+        from .native_configuration import normalize_ui_path
+        result["external-ui"] = normalize_ui_path(result["external-ui"])
     return result
 
 
@@ -172,6 +175,9 @@ def prepare_base_profile(value, target, text):
             raise ConfigError("Mihomo 基础配置不是有效 YAML") from None
         if not isinstance(base, dict) or set(base) & NATIVE_MANAGED:
             raise ConfigError("基础配置需要对象；节点、节点组、规则与入站请在各自入口编辑")
+        if isinstance(base.get("external-ui"), str) and base["external-ui"].strip():
+            from .native_configuration import normalize_ui_path
+            base["external-ui"] = normalize_ui_path(base["external-ui"])
         original = candidate["native_configuration"]["mihomo"]
         candidate["native_configuration"]["mihomo"] = {**base, **{key: deepcopy(original[key]) for key in NATIVE_MANAGED if key in original}}
     else:

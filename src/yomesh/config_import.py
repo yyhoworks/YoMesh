@@ -250,6 +250,9 @@ def _build_mihomo_native(config: dict, raw_yaml: str, extra_files: dict[str, byt
             val = listener.get(field)
             if isinstance(val, str) and val.strip() and "\n" not in val:
                 listener[field] = _normalize_mihomo_path(val)
+    if isinstance(mihomo.get("external-ui"), str) and mihomo["external-ui"].strip():
+        from .native_configuration import normalize_ui_path
+        mihomo["external-ui"] = normalize_ui_path(mihomo["external-ui"])
 
     if wiring.get("mixed_port") and "mixed-port" not in mihomo and "port" not in mihomo and "socks-port" not in mihomo:
         mihomo["mixed-port"] = wiring["mixed_port"]

@@ -144,6 +144,17 @@ class NativeConfigurationTests(unittest.TestCase):
                 self.assertEqual(spaces.workspace_snapshot(ident)["profile"]["native_configuration"]["mihomo"]["mixed-port"], 18888)
             finally:spaces.close()
 
+    def test_absolute_external_ui_is_normalized_for_portable_validation(self):
+        n = fixture()
+        n["format"] = "mihomo-v1"
+        n["mihomo"]["external-ui"] = "/etc/mihomo/ui"
+        profile = {"schema_version": 1, "fallback": "DIRECT", "native_configuration": n}
+        bundle = compile_bundle(profile, "mihomo", rule_output="remote", component="proxy")
+        import yaml
+        self.assertEqual(yaml.safe_load(bundle["files"]["mihomo.yaml"])["external-ui"], "ui")
+        result = validate_bundle(bundle, ROOT)
+        self.assertEqual(result["mihomo"]["status"], "passed")
+
     @unittest.skipIf(sys.platform == "win32", "LocalDNS FJGAC is a pinned Linux binary")
     def test_native_localdns_check_uses_pinned_binary(self):
         if not (ROOT/"tools/cores/localdns/localdns").exists():

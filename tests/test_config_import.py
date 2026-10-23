@@ -242,6 +242,7 @@ class ConfigImportTests(unittest.TestCase):
 
             zip_buf = io.BytesIO()
             native_yaml = yaml.safe_load(MIHOMO_PORTABLE_YAML)
+            native_yaml["external-ui"] = "/etc/mihomo/ui"
             native_yaml["rule-providers"] = {
                 "direct_list": {
                     "type": "file",
@@ -281,6 +282,8 @@ class ConfigImportTests(unittest.TestCase):
             space_entry = next(s for s in imported["spaces"] if s["id"] == imported["id"])
             self.assertTrue(space_entry["native"])
             self.assertEqual(space_entry["dns_engine"], "localdns")
+            saved_profile = handler.space_catalog.workspace_snapshot(imported["id"])["profile"]
+            self.assertEqual(saved_profile["native_configuration"]["mihomo"]["external-ui"], "ui")
         finally:
             server.shutdown()
             server.server_close()

@@ -171,9 +171,28 @@ def checked(value):
     return deepcopy(value)
 
 
+def normalize_ui_path(raw_path):
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return raw_path
+    cleaned = raw_path.strip().replace("\\", "/")
+    for prefix in ("/etc/mihomo/", "/opt/mihomo/", "/var/lib/mihomo/", "/usr/local/etc/mihomo/", "/usr/share/mihomo/", "./"):
+        if cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix):]
+    cleaned = cleaned.lstrip("/")
+    parts = [p for p in cleaned.split("/") if p not in {"", ".", ".."}]
+    if not parts:
+        return "ui"
+    candidate = "/".join(parts)
+    if candidate in {"mihomo.yaml", "manifest.json", "README.txt"}:
+        return "ui"
+    return safe_path(candidate)
+
+
 def resolve(value):
     native = checked(value)
     config = deepcopy(native["mihomo"])
+    if isinstance(config.get("external-ui"), str) and config["external-ui"].strip():
+        config["external-ui"] = normalize_ui_path(config["external-ui"])
     selection = native.get("selection", {})
     all_groups = {g["name"]: g for g in config.get("proxy-groups", [])}
     chosen = set(selection.get("groups") if selection.get("groups") is not None else all_groups)
