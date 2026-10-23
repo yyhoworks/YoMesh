@@ -38,7 +38,7 @@ renderLibrary = function() {
   $('#library-search').oninput=e=>{query=e.target.value;const position=e.target.selectionStart;renderLibrary();$('#library-search').focus();$('#library-search').setSelectionRange(position,position)};
   $$('[data-library-view]').forEach(b=>b.onclick=()=>viewLibrary(b.dataset.libraryView));
   $$('[data-library-edit]').forEach(b=>b.onclick=()=>editLibrary(b.dataset.libraryEdit));
-  $$('[data-library-refresh]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{adoptWorkspace(await api(`/api/library/${b.dataset.libraryRefresh}/refresh`,{}));toast('正在更新规则订阅。')}catch(e){toast(e.message);b.disabled=false}});
+  $$('[data-library-refresh]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{adoptWorkspace(await api(`/api/library/${b.dataset.libraryRefresh}/refresh`,{},spaceId,60000));toast('正在更新规则订阅。')}catch(e){toast(e.message);b.disabled=false}});
   $$('[data-library-delete]').forEach(b=>b.onclick=()=>{const l=find('library',b.dataset.libraryDelete);confirmRemoval('删除规则集',`删除「${l.name}」？正在被任一方案引用的规则集会阻止删除。`,async()=>{});$('#remove-confirm').onclick=async e=>{e.target.disabled=true;try{adoptWorkspace(await api(`/api/library/${l.id}/delete`,{revision:liveWorkspace.revision}));$('#dialog').close()}catch(error){$('#remove-error').textContent=error.message;e.target.disabled=false}}});
 };
 
@@ -74,7 +74,7 @@ editLibrary = function(ident) {
         const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
         item.file_base64=btoa(binary);item.source.filename=file.name;delete item.text;
       }
-      adoptWorkspace(await api('/api/library/save',{item,revision:liveWorkspace.revision}));$('#dialog').close();toast('规则集已保存，可在条件组中直接引用。');
+      adoptWorkspace(await api('/api/library/save',{item,revision:liveWorkspace.revision},spaceId,130000));$('#dialog').close();toast('规则集已保存，可在条件组中直接引用。');
     }catch(error){$('#library-form-error').textContent=error.message;if(error.message.includes('服务器数据已更新'))await reloadWorkspace({repaint:false,keepDraft:true})}
     finally{button.disabled=false;$('#library-cancel').disabled=false;$('#close-dialog').disabled=false;fields()}
   };

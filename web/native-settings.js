@@ -42,7 +42,7 @@ async function editBaseConfig(initial='mihomo') {
       }else{
         const request={target:active,text,revision:liveWorkspace.revision};
         if(active==='sing-box'&&$('#base-adjust-groups').checked)request.group_mode_overrides=Object.fromEntries(data.groups.filter(g=>['fallback','load-balance'].includes(g.mode)).map(g=>[g.id,'url-test']));
-        const result=await api(operation==='check'?'/api/workspace/check-base-config':'/api/workspace/preview-base-config',request);
+        const result=await api(operation==='check'?'/api/workspace/check-base-config':'/api/workspace/preview-base-config',request,spaceId,operation==='check'?60000:30000);
         if(operation==='preview'){$('#base-preview-code').textContent=result.files[active+(active==='mihomo'?'.yaml':'.json')];$('#base-preview-output').hidden=false;$('#base-save-state').textContent='合并结果为草稿，尚未原生校验。'}
         else $('#base-save-state').textContent='目标代理内核原生校验通过；草稿尚未保存。';
       }

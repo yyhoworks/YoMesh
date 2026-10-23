@@ -116,3 +116,116 @@ test('Hermes response after a route change cannot overwrite another page',async(
   await pending;
   assert.equal(content.innerHTML,'space contents');
 });
+
+test('queued persist calls serialize revisions and do not overwrite newer in-memory edits until drained',async()=>{
+  const calls=[];
+  const resolvers=[];
+  const context={
+    spaceId:'default',
+    draft:null,
+    selectedGroup:'g1',
+    data:{groups:[{id:'g1'}],fallback:'DIRECT'},
+    saved:{groups:[{id:'g1'}],fallback:'DIRECT'},
+    liveWorkspace:{state:null,revision:1,saving:false},
+    clone:value=>JSON.parse(JSON.stringify(value)),
+    render(){context.renderedFallback=context.data.fallback},
+    nav(){},
+    toast(){},
+    api:(_path,body)=>new Promise(resolve=>{
+      calls.push(body);
+      resolvers.push(resolve);
+    }),
+  };
+  vm.createContext(context);
+  const ws=source('workspace.js');
+  const adoptLine=ws.split(/\r?\n/).find(line=>line.startsWith('function adoptWorkspace('));
+  const commitLine=ws.split(/\r?\n/).find(line=>line.startsWith('function commitDraft('));
+  const persistLine=ws.split(/\r?\n/).find(line=>line.startsWith('persist=function('));
+  vm.runInContext([adoptLine,commitLine,persistLine].join('\n'),context);
+
+  context.data.fallback='PROXY-1';
+  const p1=context.persist();
+  context.data.fallback='PROXY-2';
+  const p2=context.persist();
+  context.data.fallback='PROXY-3';
+  await Promise.resolve();
+
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].revision,1);
+  assert.equal(calls[0].profile.fallback,'PROXY-1');
+
+  resolvers[0]({revision:2,profile:{groups:[{id:'g1'}],fallback:'PROXY-1'}});
+  await p1;
+  assert.equal(context.data.fallback,'PROXY-3');
+  assert.equal(context.liveWorkspace.revision,2);
+  assert.equal(calls.length,2);
+  assert.equal(calls[1].revision,2);
+  assert.equal(calls[1].profile.fallback,'PROXY-2');
+
+  resolvers[1]({revision:3,profile:{groups:[{id:'g1'}],fallback:'PROXY-2'}});
+  await p2;
+  assert.equal(context.liveWorkspace.revision,3);
+  assert.equal(context.data.fallback,'PROXY-2');
+  assert.equal(context.liveWorkspace.saving,false);
+});
+
+test('paintSpaceCards preserves presets load error and retry button across subsequent repaints',async()=>{
+  const elements={'#content':{innerHTML:''},'#space-list-status':{innerHTML:''}};
+  const context={
+    page:'spaces',
+    spaceId:'default',
+    spaceCatalog:{spaces:[]},
+    location:{origin:'http://127.0.0.1:8767'},
+    $:selector=>elements[selector]??={},
+    $$:()=>[],
+    badge:()=>'',
+    actionIcon:()=>'',
+    resourceMenu:()=>'',
+    bindResourceMenus(){},
+    openConfigImport(){},
+    openConfigurationExport(){},
+    openSubscriptionLink(){},
+    copySpaceSubscriptionDirect(){},
+    openClientControllerModal(){},
+    switchSpace:async()=>{},
+    editSpace(){},
+    deleteSpace(){},
+    toast(){},
+    api:async()=>{throw Error('presets timeout')},
+  };
+  vm.createContext(context);
+  const presetsSlice=editor.slice(editor.indexOf('const DEFAULT_PRESET_REGIONS='),editor.indexOf('async function copyTextSafe('));
+  const paintSlice=editor.slice(editor.indexOf('function paintSpacePresetsStatus('),editor.indexOf('async function editSpace('));
+  vm.runInContext([esc,presetsSlice,paintSlice].join('\n'),context);
+
+  await context.refreshSpacePresets(false);
+  context.paintSpaceCards();
+  assert(elements['#space-list-status'].innerHTML.includes('presets timeout'));
+  assert(elements['#space-list-status'].innerHTML.includes('space-presets-retry'));
+});
+
+test('quick copy subscription button aborts with toast instead of prompting to create link when presets fail',async()=>{
+  let dialogOpened=false,toastMsg='';
+  const elements={'#export':{before(){}},'.mobile-sidebar-actions':{append(){}}};
+  const context={
+    spaceId:'default',
+    spacePresetsCache:{links_by_space:{}},
+    document:{createElement:()=>({})},
+    $:selector=>elements[selector]??={},
+    copySpaceSubscriptionDirect(){},
+    openSubscriptionLink(){},
+    setNavigation(){},
+    activeSpace:()=>({id:'default',name:'Default'}),
+    refreshSpacePresets:async()=>{throw Error('network failure')},
+    showDialog:()=>{dialogOpened=true},
+    toast:msg=>{toastMsg=msg},
+  };
+  vm.createContext(context);
+  const subSource=source('subscription-links.js');
+  vm.runInContext(esc+'\n'+subSource.slice(subSource.indexOf('const quickCopySubBtn=')),context);
+  const btn=vm.runInContext('quickCopySubBtn',context);
+  await btn.onclick();
+  assert.equal(dialogOpened,false);
+  assert(toastMsg.includes('未能读取订阅链接状态'));
+});
+

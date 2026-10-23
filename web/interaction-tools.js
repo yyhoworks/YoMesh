@@ -8,7 +8,7 @@ async function synchronizeToolRevision(scope=spaceId){
     liveWorkspace.revision=snapshot.revision;liveWorkspace.state={...snapshot};
   }
 }
-const toolRequest=async(action,extra={},scope=spaceId)=>{await synchronizeToolRevision(scope);return api('/api/workspace/tools',{action,revision:liveWorkspace.revision,...extra},scope)};
+const toolRequest=async(action,extra={},scope=spaceId)=>{await synchronizeToolRevision(scope);return api('/api/workspace/tools',{action,revision:liveWorkspace.revision,...extra},scope,60000)};
 const toolError=(id,error)=>{const el=$('#'+id);if(el)el.textContent=error.message||String(error)};
 let nativePickedNodes=new Set(),nativeNodeHealth='all',nativePickedScope=null;
 const nativeHistoryOpen=new Set();
@@ -72,7 +72,8 @@ nativeRenderNodes=function(){
   const status=n=>{const s=statuses[n.id];return s?`${s.state==='success'?s.latency_ms+' ms':s.error||'测试失败（旧记录未分类）'} · ${serverTime(s.tested_at)}`:'尚未测速'};
   $('#content').innerHTML=nodeOriginTabs(manual.length,rows.length)+`<div class="toolbar"><label class="search">${icon('search')}<input id="native-search" aria-label="搜索节点" placeholder="搜索节点、协议或来源" value="${esc(query)}"></label><select id="native-node-provider" aria-label="按订阅来源筛选"><option value="all">全部订阅来源</option>${providers.map(p=>`<option value="${esc(p)}" ${p===nativeNodeProvider?'selected':''}>${esc(p)}</option>`).join('')}</select><select id="it-node-health" aria-label="按测速状态筛选"><option value="all">全部状态</option><option value="failed">仅测速失败</option><option value="success">仅测速成功</option></select></div><div class="toolbar"><label class="check-row"><input type="checkbox" id="it-select-nodes">选择当前筛选结果</label><button type="button" class="button primary" id="it-test-nodes" ${job.test_state==='running'?'disabled':''}>${job.test_state==='running'?'测速中…':'测速已选节点'}</button><button type="button" class="button" id="it-node-import">粘贴导入节点 / 订阅</button></div><p class="preview-note" role="status">${job.test_state==='running'?`正在测速 ${job.test_finished||0} / ${job.test_total} · `:''}执行位置：YoMesh 所在设备。${job.error?esc(job.error):'测速失败不会删除节点。'}</p><div class="native-resource-list">${visible.map(n=>`<article class="panel native-resource-row"><label class="check-row native-resource-name"><input type="checkbox" data-it-node="${esc(n.id)}" ${nativePickedNodes.has(n.id)?'checked':''}><span><strong>${esc(n.name)}</strong><small>${esc(n.type)} · ${esc(n.provider||'手动')}</small><small class="${statuses[n.id]?.state==='failed'?'error-message':''}">${esc(status(n))}</small></span></label><div class="filter-row"><button class="button" data-it-test="${esc(n.id)}" ${job.test_state==='running'?'disabled':''}>${statuses[n.id]?'重新测速':'测速'}</button>${n.origin==='manual'?`<button class="button" data-native-node-edit="${esc(n.name)}">编辑</button>`:''}</div></article>`).join('')||'<p class="empty">没有符合筛选条件的节点，可调整筛选或导入。</p>'}</div>`;
   $('#it-node-health').value=nativeNodeHealth;bindNodeOrigin(nativeRenderNodes);bindNativeSearch(nativeRenderNodes);$('#native-node-provider').onchange=e=>{nativeNodeProvider=e.target.value;nativeRenderNodes()};$('#it-node-health').onchange=e=>{nativeNodeHealth=e.target.value;nativeRenderNodes()};
-  for(const n of visible){const row=$(`[data-it-node="${n.id}"]`).closest('article');row.insertAdjacentHTML('beforeend',nativeProbeHistory(n,statuses[n.id]))}
+  const nodeArticles=new Map($$('[data-it-node]').map(box=>[box.dataset.itNode,box.closest('article')]));
+  for(const n of visible){const row=nodeArticles.get(n.id);if(row)row.insertAdjacentHTML('beforeend',nativeProbeHistory(n,statuses[n.id]))}
   $$('[data-it-history]').forEach(details=>details.ontoggle=()=>details.open?nativeHistoryOpen.add(details.dataset.itHistory):nativeHistoryOpen.delete(details.dataset.itHistory));
   $('#it-test-nodes').textContent=job.test_state==='running'?'测速中…':nativePickedNodes.size?`测速已选（${nativePickedNodes.size}）`:`测速当前结果（${visible.length}）`;
   const failed=visible.filter(n=>statuses[n.id]?.state==='failed');
@@ -189,7 +190,7 @@ nativeRenderProviders=function(section){renderProvidersBeforeSharing(section);co
   document.addEventListener('keydown',e=>{
     if(e.key==='Escape'&&$('#tweaks')&&!$('#tweaks').hidden)$('#tweaks').hidden=true;
   });
-  if($('#show-plan'))$('#show-plan').onclick=()=>showDialog('YoMesh 快速上手指南',`
+  if($('#show-plan'))$('#show-plan').onclick=()=>{showDialog('YoMesh 快速上手指南',`
     <div class="notice"><strong>四步完成日常代理与分流管理：</strong></div>
     <ol style="line-height:1.9;padding-left:20px;color:var(--ink)">
       <li><strong>1. 选定配置方案</strong>：在「配置方案」中为客户端或旁路由选择独立方案，点「切换到此方案」进入编辑。</li>
@@ -198,7 +199,7 @@ nativeRenderProviders=function(section){renderProvidersBeforeSharing(section);co
       <li><strong>4. 导出配置或复制订阅链接</strong>：点击右上角「订阅链接」复制固定客户端订阅地址（无需登录即可由客户端自动拉取更新），或点击「导出代理配置」下载经内核原生校验的配置包。</li>
     </ol>
     <div class="dialog-actions"><button type="button" class="button primary" id="help-close-btn">我知道了</button></div>
-  `),$('#help-close-btn')&&($('#help-close-btn').onclick=()=>$('#dialog').close());
+  `);const helpCloseBtn=$('#help-close-btn');if(helpCloseBtn)helpCloseBtn.onclick=()=>$('#dialog').close()};
 })();
 
 // Account & Password Authentication UI

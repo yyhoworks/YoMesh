@@ -30,7 +30,7 @@ renderLibrary = function() {
   $$('[data-library-edit]').forEach(b=>b.onclick=()=>editLibrary(b.dataset.libraryEdit));
   $$('[data-library-use]').forEach(b=>b.onclick=()=>editPolicy(null,b.dataset.libraryUse));
   $$('[data-library-usage]').forEach(b=>b.onclick=()=>showLibraryUsage(b.dataset.libraryUsage));
-  $$('[data-library-refresh]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{adoptWorkspace(await api(`/api/library/${b.dataset.libraryRefresh}/refresh`,{}));toast('正在更新规则订阅。')}catch(e){toast(e.message);b.disabled=false}});
+  $$('[data-library-refresh]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{adoptWorkspace(await api(`/api/library/${b.dataset.libraryRefresh}/refresh`,{},undefined,60000));toast('正在更新规则订阅。')}catch(e){toast(e.message);b.disabled=false}});
   $$('[data-library-delete]').forEach(b=>b.onclick=()=>{const l=find('library',b.dataset.libraryDelete);confirmRemoval('删除规则集',`删除「${l.name}」？仍有策略引用时会阻止删除。`,()=>{});$('#remove-confirm').onclick=async e=>{e.target.disabled=true;try{adoptWorkspace(await api(`/api/library/${l.id}/delete`,{revision:liveWorkspace.revision}));$('#dialog').close()}catch(error){$('#remove-error').textContent=error.message;e.target.disabled=false}}});
 };
 
@@ -67,7 +67,7 @@ renderPolicies=function() {
 };
 
 async function savePolicyOrder(ids, moved=null, revision=liveWorkspace.revision) {
-  if(policyBusy)return;const before=data.policies.map(p=>p.id),plan=data.active_plan;
+  if(policyBusy)throw Error('正在保存顺序，请稍候。');const before=data.policies.map(p=>p.id),plan=data.active_plan;
   if(ids.every((v,i)=>v===before[i]))return;
   policyBusy=true;liveWorkspace.saving=true;$('#content').inert=true;
   try{const state=await api('/api/workspace/reorder-policies',{ids,plan,revision});policyUndo=moved?{ids:before,plan,revision:state.revision}:null;adoptWorkspace(state);toast(moved?`已移至第 ${ids.indexOf(moved)+1} 位。`:'已撤销排序。')}
@@ -106,7 +106,7 @@ function renderDns() {
   $('#dns-form').oninput=e=>{dnsEdited=true;dnsFormDraft=values();liveWorkspace.dnsEdited=true;$('#dns-status').textContent='有未保存的设置；切换页面后仍保留草稿';$('#dns-output').hidden=true};
   $('#dns-form').onsubmit=async e=>{e.preventDefault();const settings=values();busy(true);try{const state=await api('/api/workspace/settings',{settings,revision:liveWorkspace.revision});dnsEdited=false;dnsFormDraft=null;liveWorkspace.dnsEdited=false;adoptWorkspace(state);$('#dns-status').textContent='设置已保存；尚未执行本次原生校验。'}catch(error){$('#dns-error').textContent=error.message}finally{busy(false)}};
   $('#dns-preview').onclick=async()=>{const settings=values();busy(true);$('#dns-error').textContent='';try{const result=await api('/api/workspace/preview-dns',{settings});$('#dns-config').textContent=JSON.stringify(result.config,null,2);$('#dns-preview-note').textContent=(dnsEdited?'未保存表单的预览。':'已保存设置的预览。')+' '+result.scope;$('#dns-output').hidden=false}catch(error){$('#dns-error').textContent=error.message}finally{busy(false)}};
-  $('#dns-check').onclick=async()=>{if(dnsEdited){$('#dns-error').textContent='请先保存设置，再校验。';return}busy(true);$('#dns-error').textContent='';$('#dns-status').textContent='正在检查 MosDNS…';try{await api('/api/workspace/check',{component:'dns'});$('#dns-status').textContent='MosDNS 原生校验通过；未验证远程上游或 SOCKS 连通性。'}catch(error){$('#dns-status').textContent='校验未通过';$('#dns-error').textContent=error.message}finally{busy(false)}};
+  $('#dns-check').onclick=async()=>{if(dnsEdited){$('#dns-error').textContent='请先保存设置，再校验。';return}busy(true);$('#dns-error').textContent='';$('#dns-status').textContent='正在检查 MosDNS…';try{await api('/api/workspace/check',{component:'dns'},undefined,120000);$('#dns-status').textContent='MosDNS 原生校验通过；未验证远程上游或 SOCKS 连通性。'}catch(error){$('#dns-status').textContent='校验未通过';$('#dns-error').textContent=error.message}finally{busy(false)}};
   $('#dns-download').onclick=()=>openConfigurationExport('dns');
 }
 

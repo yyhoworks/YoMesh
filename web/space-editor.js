@@ -1284,9 +1284,11 @@ const DEFAULT_PRESET_RULES=[
   {key:'adblock',name:'广告与追踪拦截',pill:'🛡️ 广告拦截',desc:'🛡️ 广告拦截 → REJECT',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-ads-all.yaml',ip_url:'',default_region:'reject'}
 ];
 let spacePresetsCache={regions:DEFAULT_PRESET_REGIONS,rules:DEFAULT_PRESET_RULES,controllers:{},links_by_space:{}};
+let spacePresetsLoadedOnce=false,spacePresetsError='',spacePresetsInFlight=null;
 async function refreshSpacePresets(required=false){
   try{
-    const res=await api('/api/spaces/presets');
+    if(!spacePresetsInFlight)spacePresetsInFlight=api('/api/spaces/presets').finally(()=>{spacePresetsInFlight=null});
+    const res=await spacePresetsInFlight;
     if(res&&typeof res==='object'){
       spacePresetsCache={
         regions:res.regions?.length?res.regions:DEFAULT_PRESET_REGIONS,
@@ -1294,8 +1296,10 @@ async function refreshSpacePresets(required=false){
         controllers:res.controllers||{},
         links_by_space:res.links_by_space||{}
       };
+      spacePresetsLoadedOnce=true;
+      spacePresetsError='';
     }
-  }catch(error){if(required)throw error}
+  }catch(error){spacePresetsError=error?.message||String(error);if(required)throw error}
   return spacePresetsCache;
 }
 async function copyTextSafe(text,okMsg='已复制到剪贴板。'){
@@ -1326,7 +1330,7 @@ async function copySpaceSubscriptionDirect(targetSpaceId){
       base_url:location.origin,
       rule_address:'original',
       revision:snap.revision
-    },s.id);
+    },s.id,60000);
     spacePresetsCache.links_by_space??={};
     spacePresetsCache.links_by_space[s.id]=[created];
     if(page==='spaces')paintSpaceCards();
@@ -1473,11 +1477,20 @@ function openHermesIntegration(){
   if(location.hash==='#hermes')renderHermesPage();
   else location.hash='hermes';
 }
-let spacePresetsLoadedOnce=false;
+function paintSpacePresetsStatus(){
+  const status=$('#space-list-status');
+  if(!status||!spacePresetsError)return;
+  status.innerHTML=`控制器与订阅链接状态未能加载，下方卡片的绑定状态可能不准确：${esc(spacePresetsError)} <button type="button" class="text-button" id="space-presets-retry">重试</button>`;
+  const retry=$('#space-presets-retry');
+  if(retry)retry.onclick=()=>{spacePresetsLoadedOnce=false;spacePresetsError='';paintSpaceCards()};
+}
 function paintSpaceCards(){
   if(!spacePresetsLoadedOnce){
     spacePresetsLoadedOnce=true;
-    refreshSpacePresets().then(()=>{if(page==='spaces')paintSpaceCards()});
+    refreshSpacePresets(true).then(()=>{spacePresetsError='';if(page==='spaces')paintSpaceCards()}).catch(error=>{
+      spacePresetsError=error?.message||String(error);
+      if(page==='spaces')paintSpacePresetsStatus();
+    });
   }
   const entries=spaceCatalog?.spaces||[];
   $('#content').innerHTML=`<div class="configuration-overview"><div><h2>Mihomo 配置导入、模板与导出</h2><p>支持直接导入现有 Mihomo YAML 配置，或选用内置的<strong>客户端版本模板</strong> / <strong>服务端版本模板</strong>（已去除 PT 与个人自定义规则）新建配置空间；随时一键导出 <code>mihomo.yaml</code> 或复制持久订阅链接。</p><div class="filter-row" style="margin-top:10px;flex-wrap:wrap"><button type="button" class="button primary" id="space-import-config">📥 导入 Mihomo 配置</button><button type="button" class="button" id="space-template-client">💻 从客户端模板新建</button><button type="button" class="button" id="space-template-server">🖥️ 从服务端模板新建</button><button type="button" class="button" id="space-export-current">📤 导出当前 Mihomo 配置</button><button type="button" class="button" id="space-open-subscription">高级订阅链接设置</button></div></div></div><div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{
@@ -1491,6 +1504,7 @@ function paintSpaceCards(){
       :`<button class="button primary" data-space-use="${esc(s.id)}">切换到此方案</button><button class="button" data-space-edit="${esc(s.id)}">${s.native?'改名 / 说明':'编辑选用'}</button><button class="button" data-space-copy="${esc(s.id)}">复制为新方案</button>${resourceMenu(s.name,`<button data-space-subscription="${esc(s.id)}">切换并查看订阅链接</button><button data-space-export="${esc(s.id)}">切换并导出 Mihomo 配置</button><button class="danger-action" data-space-delete="${esc(s.id)}" ${s.id==='default'?'disabled':''}>${s.id==='default'?'默认方案保留':'删除此方案'}</button>`)}`;
     return `<article class="panel space-card ${current?'selected':''}" aria-label="${esc(s.name)}配置空间"><div class="space-card-heading"><div><h2>${esc(s.name)}</h2><p>${s.native?'Mihomo YAML':s.proxy==='sing-box'?'sing-box JSON':'Mihomo YAML'} · ${s.native?'原生引用与缓存':{inline:'内联规则',local:'本地文件引用',remote:'远程订阅引用'}[s.rule_output]||'内联规则'}</p></div>${current?badge('当前使用中','accent'):badge('未激活')}</div><p class="space-description">${esc(s.description||'节点组 + 规则 + 分流策略的生成方案')}</p><div class="space-counts"><span><b>${counts.groups||0}</b> 节点组</span><span><b>${counts.library||0}</b> 规则</span><span><b>${counts.policies||0}</b> 策略</span></div><div class="space-inline-sub-box"><div class="space-inline-sub-label"><span>🔗 专属持久订阅链接（填入客户端 / LocalDNS 自动拉取更新）</span></div><div class="space-inline-sub-row"><input type="text" class="mono" readonly value="${esc(linkPreview)}" aria-label="${esc(s.name)}订阅链接"><button type="button" class="button primary" data-space-copy-sub="${esc(s.id)}">📋 直接复制</button></div></div><div class="space-inline-ctrl-bar"><div class="space-inline-ctrl-info"><span>🔄 客户端自动重载：</span>${ctrlConnected?`<strong style="color:#34d399">● 已绑定 (${esc(ctrl.url)}) · 改规则 0 秒热重载</strong>`:`<span>未绑定（可选填 Mihomo Controller，改规则自动热重载）</span>`}</div><div class="filter-row" style="gap:8px">${ctrlConnected?`<button type="button" class="text-button" data-space-reload-now="${esc(s.id)}">立即重载</button>`:''}<button type="button" class="text-button" data-space-controller="${esc(s.id)}">${ctrlConnected?'修改控制器':'绑定客户端控制器'}</button></div></div><p class="space-readiness ${g.error?'error-message':'generation-ready'}">${g.error?esc(g.error):g.valid?'代理选用检查通过':'等待代理检查'}${issues?` · 跳过 ${issues} 条策略`:''}</p><div class="space-card-actions">${actions}</div></article>`;
   }).join('')}</div><p class="preview-note">“当前使用中”表示左侧导航正在编辑该方案。切换方案或导出前都会自动执行原生内核校验。</p>`;
+  paintSpacePresetsStatus();
   $('#space-import-config').onclick=()=>openConfigImport();
   $('#space-template-client').onclick=()=>openConfigImport('client');
   $('#space-template-server').onclick=()=>openConfigImport('server');
