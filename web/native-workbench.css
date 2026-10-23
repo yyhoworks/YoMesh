@@ -1,6 +1,244 @@
-.native-resource-list,.native-policy-list{display:grid;gap:12px}.native-resource-row{display:flex;align-items:center;gap:14px;padding:18px 20px;min-width:0;overflow:visible}.native-resource-name{flex:1;min-width:0}.native-resource-name strong{font-size:14px;font-weight:500;overflow-wrap:anywhere}.native-resource-name small{display:block;font-size:12px;color:var(--muted);margin-top:5px;overflow-wrap:anywhere}.native-resource-row .button{font-size:13px;flex-shrink:0}.native-resource-row>.switch{flex-shrink:0}.native-group-members{margin:20px 0;flex:1;min-width:0}.native-group-members small{display:block;overflow-wrap:anywhere;font-size:12px;margin-bottom:9px;line-height:1.8}.native-policy-row{display:flex;gap:16px;align-items:center;padding:17px 20px}.native-policy-row code{flex:1;min-width:0;line-height:1.9;overflow-wrap:anywhere}.native-policy-order{font-size:12px;color:var(--muted)}.native-policy-row>.switch{flex-shrink:0}.native-policy-row[draggable]{cursor:grab}.native-dns-tabs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px}.native-document-dialog{width:min(980px,calc(100vw - 32px))}.native-document-dialog textarea{width:100%;min-height:280px;font-size:13px;line-height:1.8}.native-document-dialog .dialog-actions{position:sticky;bottom:-24px;background:var(--solid);padding-block:14px;margin-bottom:0}.native-document-dialog .scope-editor-note{margin-bottom:16px}#native-space-file-text{max-height:400px;overflow:auto}#native-group-form textarea,#ng-advanced{width:100%;font:13px/1.8 Consolas,monospace}#native-group-form fieldset{border:1px solid var(--line);border-radius:7px;margin-bottom:20px;padding:12px 16px}#native-group-form .dialog-actions{position:sticky;bottom:-24px;background:var(--solid);padding-block:14px}#native-dns-fields .check-row{min-height:44px}.native-array-item{border-top:1px solid var(--line);padding:16px 0}.native-array-item .section-title{margin-bottom:12px}.native-array-item h3{font-family:inherit;font-size:14px}.native-array-item .fields{margin-bottom:6px}.native-array-actions{display:flex;gap:10px;justify-content:space-between}.native-array-item textarea{width:100%;font:12px/1.8 Consolas,monospace}
-@media(max-width:780px){.native-resource-row{padding:15px 14px;gap:10px;flex-wrap:wrap}.native-resource-row>.native-resource-name{flex-basis:calc(100% - 70px)}.native-resource-row>.button{margin-left:auto;min-height:40px}.native-resource-row>.resource-more{min-height:40px}.native-policy-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:9px;padding:16px 14px}.native-policy-row code{grid-column:2;grid-row:1}.native-policy-row>.switch{grid-column:3;grid-row:1;align-self:start;margin-top:7px}.native-policy-row>.text-button{grid-column:2;grid-row:2;justify-self:end;min-height:40px}.native-policy-row>.resource-more{grid-column:3;grid-row:2}.native-policy-order{grid-column:1;grid-row:1}.native-policy-row code{font-size:12px}.native-document-dialog{width:calc(100vw - 16px);padding:16px}.native-document-dialog textarea{font-size:16px}.native-document-dialog .dialog-actions{bottom:-16px;gap:8px}.native-dns-tabs .button{font-size:12px;min-height:40px;padding-inline:10px}#native-group-form .fields{grid-template-columns:1fr}#native-group-form input,#native-group-form select,#native-group-form textarea{font-size:16px}.native-array-item .fields{grid-template-columns:1fr}}
+.native-resource-list,
+.native-policy-list {
+  display: grid;
+  gap: 12px;
+}
+.native-resource-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  min-width: 0;
+  overflow: visible;
+}
+.native-resource-name {
+  flex: 1;
+  min-width: 0;
+}
+.native-resource-name strong {
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.native-resource-name small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.native-resource-row .button {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.native-resource-row > .switch {
+  flex-shrink: 0;
+}
+.native-group-members {
+  margin: 20px 0;
+  flex: 1;
+  min-width: 0;
+}
+.native-group-members small {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  margin-bottom: 9px;
+  line-height: 1.8;
+}
+.native-policy-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 17px 20px;
+}
+.native-policy-row code {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+.native-policy-order {
+  font-size: 12px;
+  color: var(--muted);
+}
+.native-policy-row > .switch {
+  flex-shrink: 0;
+}
+.native-policy-row[draggable] {
+  cursor: grab;
+}
+.native-dns-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+.native-document-dialog {
+  width: min(980px, calc(100vw - 32px));
+}
+.native-document-dialog textarea {
+  width: 100%;
+  min-height: 280px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.native-document-dialog .dialog-actions {
+  position: sticky;
+  bottom: -24px;
+  background: var(--solid);
+  padding-block: 14px;
+  margin-bottom: 0;
+}
+.native-document-dialog .scope-editor-note {
+  margin-bottom: 16px;
+}
+#native-space-file-text {
+  max-height: 400px;
+  overflow: auto;
+}
+#native-group-form textarea,
+#ng-advanced {
+  width: 100%;
+  font:
+    13px/1.8 Consolas,
+    monospace;
+}
+#native-group-form fieldset {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+}
+#native-group-form .dialog-actions {
+  position: sticky;
+  bottom: -24px;
+  background: var(--solid);
+  padding-block: 14px;
+}
+#native-dns-fields .check-row {
+  min-height: 44px;
+}
+.native-array-item {
+  border-top: 1px solid var(--line);
+  padding: 16px 0;
+}
+.native-array-item .section-title {
+  margin-bottom: 12px;
+}
+.native-array-item h3 {
+  font-family: inherit;
+  font-size: 14px;
+}
+.native-array-item .fields {
+  margin-bottom: 6px;
+}
+.native-array-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+.native-array-item textarea {
+  width: 100%;
+  font:
+    12px/1.8 Consolas,
+    monospace;
+}
+@media (max-width: 780px) {
+  .native-resource-row {
+    padding: 15px 14px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .native-resource-row > .native-resource-name {
+    flex-basis: calc(100% - 70px);
+  }
+  .native-resource-row > .button {
+    margin-left: auto;
+    min-height: 40px;
+  }
+  .native-resource-row > .resource-more {
+    min-height: 40px;
+  }
+  .native-policy-row {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    gap: 9px;
+    padding: 16px 14px;
+  }
+  .native-policy-row code {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .native-policy-row > .switch {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: start;
+    margin-top: 7px;
+  }
+  .native-policy-row > .text-button {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+    min-height: 40px;
+  }
+  .native-policy-row > .resource-more {
+    grid-column: 3;
+    grid-row: 2;
+  }
+  .native-policy-order {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .native-policy-row code {
+    font-size: 12px;
+  }
+  .native-document-dialog {
+    width: calc(100vw - 16px);
+    padding: 16px;
+  }
+  .native-document-dialog textarea {
+    font-size: 16px;
+  }
+  .native-document-dialog .dialog-actions {
+    bottom: -16px;
+    gap: 8px;
+  }
+  .native-dns-tabs .button {
+    font-size: 12px;
+    min-height: 40px;
+    padding-inline: 10px;
+  }
+  #native-group-form .fields {
+    grid-template-columns: 1fr;
+  }
+  #native-group-form input,
+  #native-group-form select,
+  #native-group-form textarea {
+    font-size: 16px;
+  }
+  .native-array-item .fields {
+    grid-template-columns: 1fr;
+  }
+}
 
-.native-provider-source a{color:var(--accent-ink);text-decoration:none;overflow-wrap:anywhere}.native-provider-source a:hover{text-decoration:underline}.native-provider-source a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+.native-provider-source a {
+  color: var(--accent-ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.native-provider-source a:hover {
+  text-decoration: underline;
+}
+.native-provider-source a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
 
-@media(max-width:780px){.native-dns-tabs .button,.native-resource-row>.button{min-height:44px}}
+@media (max-width: 780px) {
+  .native-dns-tabs .button,
+  .native-resource-row > .button {
+    min-height: 44px;
+  }
+}
