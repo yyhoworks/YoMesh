@@ -172,7 +172,7 @@ def main() -> int:
                 "result": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "yomesh", "version": "1.0.0"},
+                    "serverInfo": {"name": "yomesh", "version": "1.0.1"},
                 },
             }
         elif method in {"notifications/initialized", "initialized"}:
