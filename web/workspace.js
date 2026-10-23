@@ -11,7 +11,7 @@ function redirectToLogin(reason='expired') {
   liveWorkspace.state=null;
   location.replace('/login.html?reason='+encodeURIComponent(reason)+location.hash);
 }
-async function api(path,body,scope=spaceId){const response=await fetch(path,{...(body===undefined?{}:{method:'POST',body:JSON.stringify(body)}),headers:{'Content-Type':'application/json',...workspaceHeaders(scope)}});let value;try{value=await response.json()}catch{throw Error('服务器返回异常，请稍后重试。')}if(response.status===401||value.auth_unavailable)redirectToLogin();if(!response.ok)throw Error(value.error||'请求失败');if(value&&typeof value==='object'){Object.defineProperty(value,'_spaceId',{value:scope});if(value.workspace)Object.defineProperty(value.workspace,'_spaceId',{value:scope})}return value}
+async function api(path,body,scope=spaceId,timeoutMs=15000){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);let response;try{response=await fetch(path,{...(body===undefined?{}:{method:'POST',body:JSON.stringify(body)}),headers:{'Content-Type':'application/json',...workspaceHeaders(scope)},signal:controller.signal})}catch(error){if(error?.name==='AbortError')throw Error('请求超时，请稍后重试。');throw error}finally{clearTimeout(timer)}let value;try{value=await response.json()}catch{throw Error('服务器返回异常，请稍后重试。')}if(response.status===401||value.auth_unavailable)redirectToLogin();if(!response.ok)throw Error(value.error||'请求失败');if(value&&typeof value==='object'){Object.defineProperty(value,'_spaceId',{value:scope});if(value.workspace)Object.defineProperty(value.workspace,'_spaceId',{value:scope})}return value}
 function serverTime(epoch){return epoch?new Date(epoch*1000).toLocaleString('zh-CN',{hour12:false}):'尚未更新'}
 function bytes(value){if(!Number.isFinite(value))return '—';const units=['B','KB','MB','GB','TB'];let i=0;while(value>=1024&&i<4){value/=1024;i++}return `${value.toFixed(i?1:0)} ${units[i]}`}
 function sourceStatus(id){return liveWorkspace.state?.source_status?.[id]||{}}
@@ -22,7 +22,7 @@ function isBusy(id){const s=sourceStatus(id);return s.refresh_state==='running'|
 function sourceActionButton(source,kind,label,disabled=false){return `<button class="icon-button source-action ${kind==='trash'?'danger-action':''}" title="${esc(label)}" aria-label="${esc(label+' '+source.name)}" data-action="${kind}" data-source="${esc(source.id)}" ${disabled?'disabled':''}>${actionIcon(kind)}</button>`}
 async function sourceAction(id,action,body={}){const result=await api(`/api/sources/${encodeURIComponent(id)}/${action}`,body);adoptWorkspace(result,{keepDraft:true});return result}
 function commitDraft(){if(draft)data.groups=data.groups.map(g=>g.id===draft.id?clone(draft):g)}
-persist=async function(){if(liveWorkspace.saving)throw Error('正在保存，请稍后。');commitDraft();liveWorkspace.saving=true;try{const state=await api('/api/workspace',{profile:data,revision:liveWorkspace.revision});adoptWorkspace(state);toast('已保存到群晖。');return true}finally{liveWorkspace.saving=false}};
+persist=function(){commitDraft();const snapshot=clone(data);liveWorkspace.pendingSaves=(liveWorkspace.pendingSaves||0)+1;liveWorkspace.saving=true;const run=async()=>{try{const state=await api('/api/workspace',{profile:snapshot,revision:liveWorkspace.revision});adoptWorkspace(state);toast('已保存到群晖。');return true}finally{if(--liveWorkspace.pendingSaves<=0){liveWorkspace.pendingSaves=0;liveWorkspace.saving=false}}};const result=(liveWorkspace.saveChain||Promise.resolve()).then(run,run);liveWorkspace.saveChain=result.catch(()=>{});return result};
 searchToolbar=function(placeholder,extra=''){return `<div class="toolbar"><label class="search">${icon('search')}<input id="search" placeholder="${placeholder}" aria-label="${placeholder}" value="${esc(query)}"></label><div class="filter-row">${extra}<button class="button" id="save-state">保存更改</button></div></div>`};
 bindSearch=function(fn){$('#search').oninput=e=>{query=e.target.value;const pos=e.target.selectionStart;fn();$('#search').focus();$('#search').setSelectionRange(pos,pos)};$('#save-state').onclick=()=>persist().catch(e=>toast(e.message))};
 bindToggles=function(fn){$$('[data-toggle]').forEach(b=>b.onclick=async()=>{const value=find(b.dataset.toggle,b.dataset.id),previous=value.enabled;value.enabled=!value.enabled;try{await persist();fn()}catch(e){value.enabled=previous;toast(e.message)}})};
@@ -86,17 +86,22 @@ async function initializeWorkspace(){
   if(!snapshot.profile.sources.length&&!snapshot.migrated&&genuine.length)snapshot=await api('/api/workspace/import-legacy',{sources:genuine});
   adoptWorkspace(snapshot);$('.demo-badge').textContent='服务端已连接';$('.local-label').innerHTML='<span class="status-dot"></span> 持久化配置';
   $('.sidebar-bottom p').innerHTML='订阅和节点保存在服务端。<br>导出前进行原生内核校验。';
-  for(const s of snapshot.profile.sources){if(!snapshot.source_status[s.id]?.last_attempt&&s.enabled)await sourceAction(s.id,'refresh')}
   clearInterval(liveWorkspace.poll);liveWorkspace.poll=setInterval(async()=>{
    const pollingSpace=spaceId;
    // Never replace object references while a resource form holds them, or
    // discard unsaved group edits when polling job progress.
-   if(liveWorkspace.saving||liveWorkspace.dragging||spaceSwitchBusy||liveWorkspace.dnsEdited||$('#dialog').open||dirty())return;
+   if(liveWorkspace.polling||liveWorkspace.saving||liveWorkspace.dragging||spaceSwitchBusy||liveWorkspace.dnsEdited||$('#dialog').open||dirty())return;
+   liveWorkspace.polling=true;
    try{const revision=await api('/api/workspace/revision');if(pollingSpace!==spaceId)return;$('.demo-badge').textContent='服务端已连接';if(revision.revision===liveWorkspace.revision)return;const state=await api('/api/workspace');if(liveWorkspace.saving||liveWorkspace.dragging||spaceSwitchBusy||liveWorkspace.dnsEdited||$('#dialog').open||dirty())return;
     const focused=document.activeElement,repaint=page!=='groups'&&!['INPUT','TEXTAREA','SELECT'].includes(focused?.tagName);
     if(pollingSpace!==spaceId)return;adoptWorkspace(state,{repaint,keepDraft:true});$('.demo-badge').textContent='服务端已连接';
    }catch{if(pollingSpace===spaceId)$('.demo-badge').textContent='连接中断，正在重试'}
-  },2000)
+   finally{liveWorkspace.polling=false}
+  },2000);
+  // Refresh never-fetched subscriptions in the background: one failure must
+  // not block polling or mark the whole workspace as disconnected.
+  const stale=snapshot.profile.sources.filter(s=>!snapshot.source_status[s.id]?.last_attempt&&s.enabled);
+  if(stale.length)(async()=>{const failed=[];for(const s of stale){try{await sourceAction(s.id,'refresh')}catch{failed.push(s.name)}}if(failed.length)toast(`以下订阅自动刷新失败：${failed.join('、')}`)})()
  }catch(error){liveWorkspace.connectionError=error.message;render()}
  finally{liveWorkspace.initializing=false}
 }
