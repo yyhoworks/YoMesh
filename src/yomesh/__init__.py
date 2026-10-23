@@ -1,3 +1,3 @@
 """YoMesh configuration compiler."""
 
-__version__ = "0.17.3"
+__version__ = "1.0.0"
