@@ -8,12 +8,16 @@ import io
 import ipaddress
 import json
 import re
+import socket
 import zipfile
 from copy import deepcopy
 from pathlib import Path, PurePosixPath
-from urllib.parse import urlsplit
 
 import yaml
+
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .model import BUILTINS, MATCHES, MODES, ConfigError, Profile
 from .native_configuration import checked as checked_native, json_document, safe_path
@@ -801,6 +805,84 @@ def _portable_profile(converter, config, files, wiring, root):
         raise
     except (ValueError, TypeError, AttributeError, KeyError, IndexError, RecursionError):
         raise ConfigError("配置字段类型或引用无效，未创建空间；Mihomo 配置可改用原生导入保留原件") from None
+
+
+REMOTE_CONFIG_UA = "clash.meta"
+
+# 198.18.0.0/15 是 IANA 基准测试保留段，也是 Mihomo / Clash 默认 Fake-IP 网段；
+# 开启 Fake-IP DNS 的设备把公网域名解析到该段，流量经 TUN 隧道回到真实源站，
+# 不指向内网或元数据服务，因此放行。
+FAKE_IP_NETWORKS = (ipaddress.ip_network("198.18.0.0/15"),)
+
+
+def _assert_public_http_target(url: str) -> None:
+    """拒绝解析到私网、环回、链路本地等保留地址的远程配置目标。
+
+    工作台只服务本机浏览器；此校验避免粘贴的地址被用来探测内网、
+    本机服务或云元数据端点，重定向目标同样经过校验。
+    """
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ConfigError("远程配置需要 HTTP / HTTPS 地址")
+    if parsed.username or parsed.password:
+        raise ConfigError("远程配置不支持 URL 中的用户名密码")
+    try:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        infos = socket.getaddrinfo(parsed.hostname, port, proto=socket.IPPROTO_TCP)
+    except ValueError:
+        raise ConfigError("远程配置地址端口无效") from None
+    except socket.gaierror:
+        raise ConfigError("远程配置主机名无法解析，请检查地址") from None
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0])
+        if address.version == 6 and address.ipv4_mapped is not None:
+            address = address.ipv4_mapped
+        if any(address in network for network in FAKE_IP_NETWORKS):
+            continue
+        if address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_multicast or address.is_unspecified:
+            raise ConfigError("远程配置地址解析到内网、本机或保留地址，已拒绝；内网配置请下载后使用文件上传导入")
+
+
+class _PublicOnlyRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _assert_public_http_target(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_REMOTE_OPENER = build_opener(_PublicOnlyRedirectHandler)
+
+
+def fetch_remote_config(request: dict) -> dict:
+    """拉取远程 Mihomo / sing-box 配置文本，供导入对话框预览后再导入。"""
+    url = request.get("url")
+    if not isinstance(url, str) or not url.strip() or len(url) > 8192:
+        raise ConfigError("远程配置地址无效")
+    url = url.strip()
+    _assert_public_http_target(url)
+    try:
+        http_request = Request(url, headers={"User-Agent": REMOTE_CONFIG_UA})
+        with _REMOTE_OPENER.open(http_request, timeout=20) as response:
+            if urlsplit(response.url).scheme not in {"http", "https"}:
+                raise ConfigError("远程配置重定向需要 HTTP / HTTPS")
+            body = response.read(MAX_TOTAL_BYTES + 1)
+    except ConfigError:
+        raise
+    except HTTPError as error:
+        raise ConfigError(f"远程配置返回 HTTP {error.code}，请检查地址") from None
+    except (URLError, OSError, ValueError):
+        raise ConfigError("远程配置连接失败，请检查地址、网络与超时设置") from None
+    if len(body) > MAX_TOTAL_BYTES:
+        raise ConfigError("远程配置超过 16 MiB 限制")
+    if body[:4] == b"PK\x03\x04":
+        raise ConfigError("远程地址返回配置包 (.zip)，请下载后使用文件上传导入")
+    try:
+        text = body.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise ConfigError("远程配置不是 UTF-8 文本，请下载后使用文件上传导入") from None
+    filename = _clean_archive_path(PurePosixPath(urlsplit(url).path).name) or ""
+    if not filename.lower().endswith((".yaml", ".yml", ".json")):
+        filename = (filename or "remote-config") + ".yaml"
+    return {"filename": filename, "text": text, "size": len(body)}
 
 
 def import_configuration_space(spaces, request: dict, root: Path) -> dict:

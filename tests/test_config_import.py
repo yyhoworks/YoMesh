@@ -21,8 +21,12 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from unittest.mock import patch
+
+import yomesh.config_import as config_import_module
 from yomesh.compiler import compile_bundle
-from yomesh.config_import import import_configuration_space
+from yomesh.config_import import MAX_TOTAL_BYTES, fetch_remote_config, import_configuration_space
+from yomesh.model import ConfigError
 from yomesh.server import handler_for
 from yomesh.spaces import ConfigurationSpaces
 
@@ -288,6 +292,105 @@ class ConfigImportTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             handler.space_catalog.close()
+
+
+class _FakeRemoteResponse:
+    def __init__(self, body: bytes, url: str):
+        self._body = body
+        self.url = url
+
+    def read(self, limit: int = -1) -> bytes:
+        return self._body if limit is None or limit < 0 else self._body[:limit]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class FetchRemoteConfigTests(unittest.TestCase):
+    """成功路径通过替换 DNS 解析与 opener 验证，不依赖本机网络环境。"""
+
+    # 解析结果固定为公网地址，避免不同网络对 example.com 的解析差异影响测试。
+    PUBLIC_ADDR_INFO = [(2, 1, 6, "", ("93.184.216.34", 443))]
+
+    def fetch(self, url: str, body: bytes, final_url: str | None = None):
+        captured = {}
+
+        def fake_open(request, timeout=None):
+            captured["ua"] = request.headers.get("User-agent")
+            captured["url"] = request.full_url
+            return _FakeRemoteResponse(body, final_url or request.full_url)
+
+        with patch.object(config_import_module, "socket") as fake_socket, patch.object(config_import_module._REMOTE_OPENER, "open", new=fake_open):
+            fake_socket.getaddrinfo.return_value = self.PUBLIC_ADDR_INFO
+            result = fetch_remote_config({"url": url})
+        return result, captured
+
+    def test_fetch_text_yaml_and_user_agent(self):
+        body = "mixed-port: 7890\nrules:\n  - MATCH,DIRECT\n".encode("utf-8")
+        result, captured = self.fetch("https://example.com/templates/gateway.yaml", body)
+        self.assertEqual(result["filename"], "gateway.yaml")
+        self.assertEqual(result["text"], body.decode("utf-8"))
+        self.assertEqual(result["size"], len(body))
+        self.assertEqual(captured["ua"], "clash.meta")
+        self.assertEqual(captured["url"], "https://example.com/templates/gateway.yaml")
+
+    def test_fetch_infers_yaml_extension(self):
+        result, _ = self.fetch("https://example.com/download/config", b"rules: []\n")
+        self.assertEqual(result["filename"], "config.yaml")
+        result, _ = self.fetch("https://example.com", b"rules: []\n")
+        self.assertEqual(result["filename"], "remote-config.yaml")
+
+    def test_fetch_rejects_zip_and_binary_payloads(self):
+        with self.assertRaisesRegex(ConfigError, "配置包"):
+            self.fetch("https://example.com/pkg.zip", b"PK\x03\x04rest-of-archive")
+        with self.assertRaisesRegex(ConfigError, "UTF-8"):
+            self.fetch("https://example.com/blob.yaml", b"\xff\xfe\x00\x01")
+
+    def test_fetch_rejects_oversize_payload(self):
+        with self.assertRaisesRegex(ConfigError, "16 MiB"):
+            self.fetch("https://example.com/big.yaml", b"x" * (MAX_TOTAL_BYTES + 1))
+
+    def test_fetch_maps_http_error(self):
+        def raise_404(request, timeout=None):
+            raise HTTPError(request.full_url, 404, "Not Found", None, None)
+
+        with patch.object(config_import_module, "socket") as fake_socket, patch.object(config_import_module._REMOTE_OPENER, "open", new=raise_404):
+            fake_socket.getaddrinfo.return_value = self.PUBLIC_ADDR_INFO
+            with self.assertRaisesRegex(ConfigError, "HTTP 404"):
+                fetch_remote_config({"url": "https://example.com/missing.yaml"})
+
+
+class RemoteTargetGuardTests(unittest.TestCase):
+    """内网 / 环回 / 链路本地目标在校验层直接拒绝，不发起到这些地址的请求。"""
+
+    def test_guard_rejects_non_public_targets(self):
+        from yomesh.config_import import _assert_public_http_target
+
+        cases = [
+            "ftp://example.com/config.yaml",
+            "http://user:pass@example.com/config.yaml",
+            "http://127.0.0.1:8767/config.yaml",
+            "http://localhost/config.yaml",
+            "http://192.168.1.10/config.yaml",
+            "https://169.254.169.254/latest/meta-data",
+        ]
+        for url in cases:
+            with self.subTest(url=url):
+                with self.assertRaises(ConfigError):
+                    _assert_public_http_target(url)
+
+    def test_fetch_rejects_missing_url(self):
+        with self.assertRaisesRegex(ConfigError, "地址无效"):
+            fetch_remote_config({"url": ""})
+
+    def test_guard_allows_fake_ip_dns_resolution(self):
+        from yomesh.config_import import _assert_public_http_target
+
+        # 开启 Fake-IP DNS 的设备把公网域名解析到 198.18.0.0/15，应放行。
+        _assert_public_http_target("http://198.18.27.47/config.yaml")
 
 
 if __name__ == "__main__":

@@ -326,6 +326,10 @@ def handler_for(root: Path, port: int, public_hosts=()):
                     from .config_import import import_configuration_space
                     self.json_response(200, import_configuration_space(spaces, request, root))
                     return
+                if self.path == "/api/spaces/fetch-config":
+                    from .config_import import fetch_remote_config
+                    self.json_response(200, fetch_remote_config(request))
+                    return
                 if self.path == "/api/spaces/import-native":
                     profile = {"schema_version": 1, "fallback": "DIRECT", "native_configuration": request.get("configuration")}
                     # Explicit draft import preserves faulty originals for comparison.
