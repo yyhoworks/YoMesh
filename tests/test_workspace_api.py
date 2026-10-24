@@ -263,10 +263,16 @@ class WorkspaceAPITests(unittest.TestCase):
         self.assertEqual(self.state()["profile"]["policies"][0]["target"], "DIRECT")
         self.assertEqual(self.request("/api/workspace", {"profile": profile, "revision": state["revision"]})[0], 409)
 
-    def test_bad_input_and_cross_origin_are_rejected(self):
+    def test_bad_input_and_reverse_proxy_hosts_are_accepted(self):
         self.assertEqual(self.request("/api/sources", {"source": [], "revision": 0})[0], 422)
-        self.assertEqual(self.request("/api/workspace", headers={"Origin": "https://untrusted.example"})[0], 403)
-        self.assertEqual(self.request("/api/workspace", headers={"Host": "untrusted.example"})[0], 403)
+        # Host/Origin checking was removed so reverse proxies work unchanged.
+        self.assertEqual(self.request("/api/workspace", headers={"Origin": "https://proxy.example"})[0], 200)
+        self.assertEqual(self.request("/api/workspace", headers={"Host": "proxy.example:9443"})[0], 200)
+
+    def test_wildcard_allowed_host_accepts_reverse_proxy_hosts(self):
+        # Retained coverage: every host is accepted directly; no extra server
+        # flags are needed anymore.
+        self.assertEqual(self.request("/api/health", headers={"Host": "proxy.example.com:9443"})[0], 200)
 
     def test_dns_settings_preview_and_policy_reorder_http(self):
         state = self.state()

@@ -30,12 +30,11 @@ def main(argv=None):
     server = sub.add_parser("serve")
     server.add_argument("--port", type=int, default=8767)
     server.add_argument("--host", choices=("127.0.0.1", "0.0.0.0"), default="127.0.0.1")
-    server.add_argument("--allowed-host", action="append", default=[])
     args = parser.parse_args(argv)
     try:
         if args.command == "serve":
             from .server import serve
-            serve(project_root(), args.port, args.host, args.allowed_host)
+            serve(project_root(), args.port, args.host)
             return 0
         value = json.loads(args.profile.read_text(encoding="utf-8-sig"))
         targets = ("mihomo",) if args.component == "dns" else ("mihomo", "sing-box") if args.proxy == "both" else (args.proxy,)

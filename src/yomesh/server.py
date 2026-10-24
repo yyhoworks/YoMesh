@@ -21,9 +21,7 @@ from .spaces import ConfigurationSpaces
 from .workspace import Conflict
 
 
-def handler_for(root: Path, port: int, public_hosts=()):
-    allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}", *public_hosts}
-    allowed_origins = {scheme + h for h in allowed_hosts for scheme in ("http://", "https://")}
+def handler_for(root: Path, port: int):
     spaces = ConfigurationSpaces(root)
     publications = Publications(root, spaces)
     hermes_access = HermesAccess(root)
@@ -32,7 +30,7 @@ def handler_for(root: Path, port: int, public_hosts=()):
     from .interaction_service import InteractionService
     interactions = InteractionService(root, spaces)
     hermes_service = HermesService(root, spaces, publications, interactions, controllers=controllers)
-    subscriptions = spaces.runtime("default").subscriptions
+    subscriptions = spaces.runtime(spaces.state["active"]).subscriptions
 
     class Handler(SimpleHTTPRequestHandler):
         subscription_service = subscriptions
@@ -69,9 +67,6 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 return auth.current_username()
             return auth.verify_cookie(self.headers.get("Cookie"))
 
-        def local_request(self):
-            return self.headers.get("Host") in allowed_hosts and self.headers.get("Origin", "http://" + self.headers.get("Host", "")) in allowed_origins
-
         def log_message(self, format, *args):
             if self.path.startswith("/s/"):
                 return super().log_message("%s", "subscription request (URL redacted)")
@@ -83,9 +78,6 @@ def handler_for(root: Path, port: int, public_hosts=()):
         def send_head(self):
             # Guard the HTML itself, including HEAD, query strings and encoded
             # aliases. No workspace shell is delivered before authentication.
-            if not self.local_request():
-                self.send_error(403, "Host or origin not allowed")
-                return None
             target = Path(self.translate_path(self.path)).resolve()
             web = (root / "web").resolve()
             if target in {web, web / "index.html"}:
@@ -129,9 +121,6 @@ def handler_for(root: Path, port: int, public_hosts=()):
                     self.json_response(422, {"error": str(error)})
                 except (OSError, ValueError, TypeError):
                     self.json_response(503, {"error": "配置生成未完成，请稍后重试或在工作台检查配置"})
-                return
-            if not self.local_request():
-                self.json_response(403, {"error": "请求地址未列入 YoMesh 允许的访问地址"})
                 return
             if self.path == "/api/health":
                 found = {}
@@ -222,9 +211,6 @@ def handler_for(root: Path, port: int, public_hosts=()):
                 super().do_GET()
 
         def do_POST(self):
-            if not self.local_request():
-                self.json_response(403, {"error": "请求地址未列入 YoMesh 允许的访问地址"})
-                return
             if self.path != "/api/export" and not self.path.startswith(("/mcp", "/api/auth", "/api/spaces", "/api/hermes", "/api/integrations/hermes", "/api/sources", "/api/workspace", "/api/nodes", "/api/library", "/api/groups")):
                 self.json_response(404, {"error": "接口不存在"})
                 return
@@ -633,10 +619,10 @@ def handler_for(root: Path, port: int, public_hosts=()):
     return Handler
 
 
-def serve(root: Path, port=8767, host="127.0.0.1", public_hosts=()):
+def serve(root: Path, port=8767, host="127.0.0.1"):
     if not 1024 <= port <= 65535:
         raise ConfigError("UI 端口需要为 1024–65535")
-    server = ThreadingHTTPServer((host, port), handler_for(root, port, public_hosts))
+    server = ThreadingHTTPServer((host, port), handler_for(root, port))
     print(f"YoMesh: http://{host}:{port} (Ctrl+C to stop)", flush=True)
     try:
         server.serve_forever()

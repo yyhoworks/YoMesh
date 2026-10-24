@@ -106,6 +106,10 @@ class ConfigurationSpaceTests(unittest.TestCase):
         self.spaces = ConfigurationSpaces(self.root)
         self.assertEqual(self.spaces.snapshot()["active"], native["id"])
         self.assertTrue(all(s["id"] != "default" for s in self.spaces.snapshot()["spaces"]))
+        # 服务启动不再硬编码 default：handler 构造（订阅服务解析）在无 default 时可用。
+        from yomesh.server import handler_for
+        handler = handler_for(self.root, 18123)
+        handler.space_catalog.close()
 
     def test_background_status_and_generated_configs_stay_in_own_space(self):
         ident = self.create()["id"]

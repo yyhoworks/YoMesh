@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     ports:
       - "${YOMESH_BIND_IP:-127.0.0.1}:${YOMESH_PORT:-8767}:8767"
-    command: ["python", "scripts/yomesh.py", "serve", "--host", "0.0.0.0", "--port", "8767", "--allowed-host", "${YOMESH_ALLOWED_HOST:-127.0.0.1:8767}"]
+    command: ["python", "scripts/yomesh.py", "serve", "--host", "0.0.0.0", "--port", "8767"]
     volumes:
       - ./data:/app/data
     read_only: true

@@ -183,7 +183,9 @@ class PublicationTests(unittest.TestCase):
         record = self.create()
         path = urlsplit(record["url"]).path
         self.assertEqual(self.request(path, headers={"Host": "proxy.example.test"}, raw=True)[0], 200)
-        self.assertEqual(self.request("/api/workspace", headers={"Host": "proxy.example.test"})[0], 403)
+        # Host checking was removed; the management API answers any host and
+        # still requires login when auth is enabled.
+        self.assertEqual(self.request("/api/workspace", headers={"Host": "proxy.example.test"})[0], 200)
         self.assertEqual(self.request(path.replace("mihomo.yaml", "assets/../../workspace.json"))[0], 404)
         self.assertEqual(self.request("/s/" + "a" * 43 + "/mihomo.yaml")[0], 404)
 
