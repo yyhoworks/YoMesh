@@ -193,10 +193,10 @@ nativeRenderProviders=function(section){renderProvidersBeforeSharing(section);co
   if($('#show-plan'))$('#show-plan').onclick=()=>{showDialog('YoMesh 快速上手指南',`
     <div class="notice"><strong>四步完成日常代理与分流管理：</strong></div>
     <ol style="line-height:1.9;padding-left:20px;color:var(--ink)">
-      <li><strong>1. 选定配置方案</strong>：在「配置方案」中为客户端或旁路由选择独立方案，点「切换到此方案」进入编辑。</li>
-      <li><strong>2. 接入节点资源</strong>：在左侧「节点资源 → 节点订阅」中添加机场订阅（只需填名称与 URL，缓存路径自动生成）。</li>
-      <li><strong>3. 组织分组与分流规则</strong>：在「节点分组」按地区/用途归类节点；在「分流规则」顶部可随时切换「分流规则」与「规则来源库」，编辑规则时支持「直接走单个出口」或「组合多个候选出口」。</li>
-      <li><strong>4. 导出配置或复制订阅链接</strong>：点击右上角「订阅链接」复制固定客户端订阅地址（无需登录即可由客户端自动拉取更新），或点击「导出代理配置」下载经内核原生校验的配置包。</li>
+      <li><strong>1. 选定配置方案</strong>：左侧「配置方案」中当前使用的方案就是生成目标；也可新建、复制或切换方案。</li>
+      <li><strong>2. 接入节点资源</strong>：点「添加节点订阅」或在「节点订阅」页添加机场订阅（只需填名称与 URL，缓存路径自动生成）。</li>
+      <li><strong>3. 组织分组与分流规则</strong>：订阅导入后点「按地区快速建组」生成香港、日本等线路组；在「分流规则」添加规则，可选订阅规则集或直接填写条件。</li>
+      <li><strong>4. 导出配置或复制订阅链接</strong>：右上角「导出 Mihomo 配置」下载经内核原生校验的配置包；空间卡片可一键复制持久订阅链接（客户端自动拉取更新）。</li>
     </ol>
     <div class="dialog-actions"><button type="button" class="button primary" id="help-close-btn">我知道了</button></div>
   `);const helpCloseBtn=$('#help-close-btn');if(helpCloseBtn)helpCloseBtn.onclick=()=>$('#dialog').close()};

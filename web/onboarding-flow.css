@@ -1,0 +1,83 @@
+.onboard-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 10px 0 4px;
+}
+.onboard-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 4px 11px 4px 4px;
+  border-radius: 8px;
+}
+.onboard-step i {
+  font-style: normal;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+.onboard-step.active {
+  color: var(--ink);
+  background: var(--tint);
+}
+.onboard-step.active i {
+  background: var(--button-bg);
+  color: #fff;
+}
+.onboard-step.done {
+  color: var(--green);
+}
+.onboard-step.done i {
+  background: color-mix(in srgb, var(--green) 22%, transparent);
+  color: var(--green);
+}
+.onboard-arrow {
+  color: var(--muted);
+  opacity: 0.55;
+  font-size: 12px;
+}
+.onboard-alt {
+  font-size: 12px;
+  color: var(--muted);
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.source-relay {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.source-relay > span {
+  flex: 1;
+  min-width: 220px;
+}
+.rc-outlet-hint {
+  margin-top: 10px;
+}
+.rc-outlet-hint .button {
+  margin-top: 6px;
+}
+.export-skip {
+  margin-top: 8px;
+}
+.export-skip p {
+  margin: 6px 0 0;
+}
+.export-skip small {
+  display: block;
+  color: var(--muted);
+}

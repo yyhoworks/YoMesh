@@ -65,8 +65,11 @@ async function openConfigurationExport(component='proxy'){
         const body=await request(),result=await api('/api/workspace/export-check',{...body,revision:liveWorkspace.revision});
         if(serial!==preflightSerial||!$('#native-export-form'))return;
         preflightReady=result.ready;preflightFingerprint=JSON.stringify(body);
+        const generation=!dns&&source()==='current'?generationView():null,excluded=generation?.excluded_policies||[],policyCount=generation?.counts?.policies;
+        const policyText=policyCount!=null?` · ${policyCount} 条策略`:'',skipText=excluded.length?` · 跳过 ${excluded.length} 条`:'';
+        const skipDetails=excluded.length?`<details class="export-skip"><summary>查看跳过的策略及原因</summary>${excluded.map(p=>`<p><strong>${esc(p.name)}</strong><small>${esc(p.reason)}</small></p>`).join('')}</details>`:'';
         $('#export-preflight').classList.toggle('is-error',!result.ready);
-        $('#export-preflight').innerHTML=result.ready?`<strong>配置组合检查通过</strong><span>将生成 ${result.file_count} 个文件；可直接下载单文件或完整配置包。</span>`:`<strong>当前配置还不能生成</strong><span>${esc(result.error)}</span>`;
+        $('#export-preflight').innerHTML=result.ready?`<strong>配置组合检查通过</strong><span>将生成 ${result.file_count} 个文件${policyText}${skipText}；可直接下载单文件或完整配置包。</span>${skipDetails}`:`<strong>当前配置还不能生成</strong><span>${esc(result.error)}</span>`;
       }catch(error){if(serial!==preflightSerial||!$('#native-export-form'))return;$('#export-preflight').classList.add('is-error');$('#export-preflight').innerHTML=`<strong>请先完成配置</strong><span>${esc(error.message)}</span>`}
       if(serial===preflightSerial&&$('#native-export-form')){$('#native-export-submit').disabled=!preflightReady;$('#native-export-preview').disabled=!preflightReady;if($('#native-export-single'))$('#native-export-single').disabled=!preflightReady}
     },180);

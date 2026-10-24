@@ -96,6 +96,10 @@ nativePolicyEditor=function(ident=null,done=null){
   const prevent=event=>{if(e.saving)event.preventDefault()};dialog.addEventListener('cancel',prevent);
   dialog.addEventListener('close',()=>{dialog.classList.remove('np-rule-dialog','rc-editor-dialog');dialog.removeEventListener('cancel',prevent);clearTimeout(e.timer);if(nativePolicyForm===e)nativePolicyForm=null},{once:true});setNativeEditorReturn(done);
   $('#np-rule-cancel').onclick=()=>dialog.close();
+  const usableGroupOutlets=(nativePolicyView().outlet_choices||[]).filter(choice=>choice.available&&choice.resource!=='builtin');
+  const outletCards=$('.rc-outlet-cards');
+  if(outletCards&&!usableGroupOutlets.length)outletCards.insertAdjacentHTML('afterend',`<div class="notice rc-outlet-hint">还没有可用的节点组出口（当前只有 DIRECT / REJECT）。先到「节点分组」建一个地区组，再回来选出口。<button type="button" class="button" id="rg-outlet-hint-groups">去建组</button></div>`);
+  if($('#rg-outlet-hint-groups'))$('#rg-outlet-hint-groups').onclick=()=>{dialog.close();location.hash='groups'};
   $$('[data-rc-preset]').forEach(btn=>btn.onclick=()=>{
     const list=typeof spacePresetsCache==='object'&&spacePresetsCache?.rules||typeof DEFAULT_PRESET_RULES!=='undefined'&&DEFAULT_PRESET_RULES||[];
     const preset=list.find(r=>r.key===btn.dataset.rcPreset);
