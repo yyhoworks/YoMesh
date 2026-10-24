@@ -1,4 +1,5 @@
 """Configuration isolation, migration and reload coverage."""
+import base64
 import json
 import sys
 import tempfile
@@ -12,6 +13,11 @@ from yomesh.spaces import ConfigurationSpaces
 from yomesh.workspace import Workspace, Conflict
 from yomesh.model import ConfigError
 from yomesh.compiler import compile_bundle
+
+
+def native_fixture():
+    """Minimal valid native configuration (mirrors test_native_configuration.fixture)."""
+    return {"format": "mihomo-localdns-v1", "mihomo": {"mixed-port": 17890, "proxies": [], "proxy-providers": {}, "proxy-groups": [{"name": "直连组", "type": "select", "proxies": ["DIRECT"]}], "rule-providers": {"one": {"type": "inline", "behavior": "domain", "payload": ["example.com"]}}, "listeners": []}, "policies": [{"id": "first", "text": "RULE-SET,one,直连组", "enabled": True}, {"id": "final", "text": "MATCH,DIRECT", "enabled": True}], "documents": {"localdns/config/localdns.json": json.dumps({"memory_limit_mb": 150, "api": {"http": "127.0.0.1:19099"}, "dns": {"udp_listen": "127.0.0.1:19553", "tcp_listen": "127.0.0.1:19553"}}), "localdns/rules/manual/proxy_domains.txt": "example.com\n"}, "assets": {"localdns/rules/fixture.bin": base64.b64encode(b"\x00\xffnative").decode()}}
 
 
 class ConfigurationSpaceTests(unittest.TestCase):
@@ -66,20 +72,40 @@ class ConfigurationSpaceTests(unittest.TestCase):
             with self.assertRaises(ConfigError):
                 self.spaces.runtime(ident)
 
-    def test_blank_profile_and_delete_protect_default_and_active(self):
+    def test_delete_protects_active_and_shared_source_spaces(self):
         result = self.create(copy_from=None)
         ident = result["id"]
-        self.assertEqual(self.spaces.workspace_snapshot(ident)["profile"]["composition"]["groups"], [])
         self.spaces.select(ident, result["revision"])
-        for protected in ("default", ident):
-            with self.assertRaises(ConfigError):
-                self.spaces.delete(protected, self.spaces.snapshot()["revision"])
-        self.spaces.select("default", self.spaces.snapshot()["revision"])
+        # 当前使用中的空间不可删除。
+        with self.assertRaises(ConfigError):
+            self.spaces.delete(ident, self.spaces.snapshot()["revision"])
+        # 便携空间仍以 default 为共享资源来源，default 不可删除。
+        with self.assertRaises(ConfigError):
+            self.spaces.delete("default", self.spaces.snapshot()["revision"])
+        # 复制空间沿链条共享 default 的资源：直接来源可删除，根部 default 仍受保护。
+        copied = self.create(name="平板", copy_from=ident)
+        self.spaces.select(copied["id"], copied["revision"])
         self.spaces.delete(ident, self.spaces.snapshot()["revision"])
         with self.assertRaises(ConfigError):
-            self.spaces.runtime(ident)
-        self.assertEqual(self.spaces.state["archived"][-1]["id"], ident)
+            self.spaces.delete("default", self.spaces.snapshot()["revision"])
+
+    def test_delete_default_after_only_native_spaces_remain(self):
+        native = self.spaces.import_native(native_fixture(), "原生方案", self.spaces.snapshot()["revision"])
+        self.spaces.select(native["id"], self.spaces.snapshot()["revision"])
+        # 全原生空间场景：default 不再被引用，切换后允许删除并归档保留。
+        self.spaces.delete("default", self.spaces.snapshot()["revision"])
+        with self.assertRaises(ConfigError):
+            self.spaces.runtime("default")
+        self.assertEqual(self.spaces.state["archived"][-1]["id"], "default")
         self.assertTrue((self.root / "data/workspace.json").exists())
+        # 仅剩最后一个空间时不可删除。
+        with self.assertRaises(ConfigError):
+            self.spaces.delete(native["id"], self.spaces.snapshot()["revision"])
+        # 删除 default 后重新加载，当前方案保持有效。
+        self.spaces.close()
+        self.spaces = ConfigurationSpaces(self.root)
+        self.assertEqual(self.spaces.snapshot()["active"], native["id"])
+        self.assertTrue(all(s["id"] != "default" for s in self.spaces.snapshot()["spaces"]))
 
     def test_background_status_and_generated_configs_stay_in_own_space(self):
         ident = self.create()["id"]

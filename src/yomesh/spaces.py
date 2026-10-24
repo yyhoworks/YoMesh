@@ -523,8 +523,10 @@ class ConfigurationSpaces:
         with self.lock:
             self._revision(revision)
             item = self._item(ident)
-            if ident == "default" or ident == self.state["active"]:
-                raise ConfigError("默认或使用中的配置空间不能删除，请先切换到其他空间")
+            if ident == self.state["active"]:
+                raise ConfigError("使用中的配置空间不能删除，请先切换到其他空间")
+            if len(self.state["spaces"]) <= 1:
+                raise ConfigError("至少保留一个配置空间，最后一个方案不能删除")
             if any(s.get("source_space") == ident for s in self.state["spaces"]):
                 raise ConfigError("此空间仍为其他生成方案提供共享资源，不能删除")
             runtime = self.runtimes.get(ident)

@@ -1534,8 +1534,10 @@ function paintSpaceCards(){
     const current=s.id===spaceId,counts=s.counts||{},g=s.generation||{},issues=g.excluded_policies?.length||0;
     const ctrl=spacePresetsCache.controllers?.[s.id];
     const ctrlConnected=ctrl?.enabled&&ctrl?.url;
-    const currentMenu=`<button data-space-copy-sub="${esc(s.id)}">📋 复制订阅链接</button>${ctrlConnected?`<button data-space-reload-now="${esc(s.id)}">🔄 立即热重载</button><button data-space-controller="${esc(s.id)}">修改客户端控制器</button>`:`<button data-space-controller="${esc(s.id)}">🔄 绑定客户端控制器</button>`}<button data-space-edit="${esc(s.id)}">修改名称与说明</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" disabled>${s.id==='default'?'默认方案保留':'切换后可删除'}</button>`;
-    const otherMenu=`<button data-space-copy-sub="${esc(s.id)}">📋 复制订阅链接</button><button data-space-export="${esc(s.id)}">切换并导出 Mihomo 配置</button><button data-space-edit="${esc(s.id)}">改名 / 说明</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" ${s.id==='default'?'disabled':''}>${s.id==='default'?'默认方案保留':'删除此方案'}</button>`;
+    const deletable=entries.length>1;
+    const deleteLabel=deletable?(current?'切换后可删除':'删除此方案'):'最后一个方案保留';
+    const currentMenu=`<button data-space-copy-sub="${esc(s.id)}">📋 复制订阅链接</button>${ctrlConnected?`<button data-space-reload-now="${esc(s.id)}">🔄 立即热重载</button><button data-space-controller="${esc(s.id)}">修改客户端控制器</button>`:`<button data-space-controller="${esc(s.id)}">🔄 绑定客户端控制器</button>`}<button data-space-edit="${esc(s.id)}">修改名称与说明</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" disabled>${deleteLabel}</button>`;
+    const otherMenu=`<button data-space-copy-sub="${esc(s.id)}">📋 复制订阅链接</button><button data-space-export="${esc(s.id)}">切换并导出 Mihomo 配置</button><button data-space-edit="${esc(s.id)}">改名 / 说明</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" ${deletable?'':'disabled'}>${deleteLabel}</button>`;
     const actions=current
       ?`<button class="button primary" data-space-configure="${esc(s.id)}">去配置规则</button><button class="button" data-space-export="${esc(s.id)}">${actionIcon('download')}导出</button>${resourceMenu(s.name,currentMenu)}`
       :`<button class="button primary" data-space-use="${esc(s.id)}">切换到此方案</button><button class="button" data-space-copy="${esc(s.id)}">复制为新方案</button>${resourceMenu(s.name,otherMenu)}`;
@@ -1570,7 +1572,8 @@ function paintSpaceCards(){
 async function editSpace(ident=null,copyFrom=null){
   try{
     await saveSpaceDrafts();await refreshSpaceCatalog();
-    const original=spaceCatalog.spaces.find(s=>s.id===ident),sourceId=ident||copyFrom||'default';
+    const original=spaceCatalog.spaces.find(s=>s.id===ident),sourceId=ident||copyFrom||spaceCatalog.spaces.find(s=>s.id===spaceCatalog.active)?.id||spaceCatalog.spaces[0]?.id;
+    if(!sourceId)throw Error('请先创建一个配置空间。');
     const source=spaceCatalog.spaces.find(s=>s.id===sourceId),snapshot=await api('/api/workspace',undefined,sourceId);
     const e={id:ident,copyFrom,sourceId,revision:snapshot.revision,catalogRevision:spaceCatalog.revision,profile:snapshot.profile,usage:snapshot.usage,selection:clone(snapshot.profile.composition||{}),tab:'policies',query:'',only:false,pending:false,saving:false,preview:null,timer:null,serial:0,fields:{name:original?.name||(copyFrom?source.name+' 副本':''),description:original?.description||'',proxy:source?.proxy||'mihomo',rule_output:source?.rule_output||'inline'}};
     if(!original&&!copyFrom)e.selection={groups:[],rules:[],policies:[],fallback:'DIRECT'};
