@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from test_native_configuration import fixture
 from yomesh.compiler import compile_bundle
-from yomesh.interaction_tools import node_catalog, preview_group, parse_import, diagnose, repair_reference, wait_native_ready
+from yomesh.interaction_tools import node_catalog, preview_group, group_overview, parse_import, diagnose, repair_reference, wait_native_ready
 from yomesh.interaction_service import InteractionService
 from yomesh.model import ConfigError
 from yomesh.native import validate_bundle
@@ -68,6 +68,25 @@ class NativeInteractionTests(unittest.TestCase):
         self.assertEqual(result["count"], 0)
         self.assertTrue(result["fallback"])
         self.assertEqual(result["members"], [])
+
+    def test_group_overview_resolves_every_group_in_one_core_run(self):
+        n = native()
+        n["documents"]["providers/one.yaml"] += "- name: 香港 Provider\n  type: ss\n  server: 127.0.0.1\n  port: 9\n  cipher: aes-128-gcm\n  password: test-fixture-only\n"
+        n["mihomo"]["proxy-groups"] = [
+            {"name": "香港组", "type": "select", "filter": "香港", "use": ["手动"]},
+            {"name": "显式组", "type": "select", "proxies": ["香港 01"]},
+            {"name": "空组", "type": "select", "filter": "NO-MATCH-NODE", "use": ["手动"]},
+        ]
+        original = deepcopy(n)
+        result = group_overview(ROOT, n)
+        self.assertEqual(set(result["groups"]), {"香港组", "显式组", "空组"})
+        self.assertEqual(result["groups"]["香港组"]["count"], 1)
+        self.assertEqual(len(result["groups"]["香港组"]["test_ids"]), 1)
+        self.assertEqual(result["groups"]["显式组"]["count"], 1)
+        self.assertEqual(len(result["groups"]["显式组"]["test_ids"]), 1)
+        self.assertEqual(result["groups"]["空组"]["count"], 0)
+        self.assertEqual(result["groups"]["空组"]["test_ids"], [])
+        self.assertEqual(n, original)
 
     def test_isolated_preview_does_not_change_candidate_health_settings(self):
         request = {"group": {"name": "auto", "type": "url-test", "use": ["手动"], "url": "https://www.gstatic.com/generate_204", "interval": 123, "lazy": False}}

@@ -218,6 +218,21 @@ def preview_group(root, native, request):
     return {"group": group, "filter_view": group_filter_view(group), "members": [by_name.get(n, {"name": n, "type": "节点组 / 内置出口"}) for n in names], "count": len(names), "fallback": fallback, "method": "mihomo-1.19.32", "note": "未匹配到节点，内核正在使用临时兜底；请调整筛选" if fallback else "根据已缓存节点由原生内核计算；未测速"}
 
 
+def group_overview(root, native):
+    """One isolated core run resolves every group's members for card badges and tests."""
+    catalog = node_catalog(native)
+    by_name = {n["name"]: n for n in catalog}
+    with native_core(root, native) as core:
+        proxies = core("/proxies").get("proxies", {})
+    groups = {}
+    for group in native["mihomo"].get("proxy-groups", []):
+        names = (proxies.get(group["name"]) or {}).get("all", [])
+        if names == ["COMPATIBLE"] and "COMPATIBLE" not in group.get("proxies", []):
+            names = []
+        groups[group["name"]] = {"count": len(names), "test_ids": [by_name[name]["id"] for name in names if name in by_name][:300]}
+    return {"groups": groups, "method": "mihomo-1.19.32", "note": "根据已缓存节点由原生内核计算；未测速"}
+
+
 def diagnose(native, query, context=None):
     """Tri-state evaluation: unknown earlier rules prevent a false definitive match."""
     if not isinstance(query, str) or not query.strip() or len(query) > 253:

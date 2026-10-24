@@ -128,7 +128,7 @@ class HermesMcpTests(unittest.TestCase):
         status, presets = self.api("/api/spaces/presets")
         self.assertEqual(status, 200, presets)
         self.assertEqual(len(presets["regions"]), 5)
-        self.assertEqual(len(presets["rules"]), 8)
+        self.assertEqual(len(presets["rules"]), 15)
 
         # 2. Quick region groups adds missing HK/TW/JP/SG/US groups in 1 click
         status, rg_res = self.api("/api/workspace/quick-region-groups", {})
@@ -201,11 +201,15 @@ class HermesMcpTests(unittest.TestCase):
         js_path = Path(__file__).resolve().parents[1] / "web" / "space-editor.js"
         js_text = js_path.read_text(encoding="utf-8")
 
-        # Verify Hermes block is removed from paintSpaceCards
+        # Verify Hermes block is removed and banner no longer duplicates the
+        # template entry points (they live in the import dialog only).
         paint_section = js_text.split("function paintSpaceCards()", 1)[1].split("async function editSpace", 1)[0]
         self.assertNotIn("Hermes 智能助手 & HTTP MCP", paint_section)
-        self.assertIn("space-template-client", paint_section)
-        self.assertIn("space-template-server", paint_section)
+        self.assertNotIn("space-template-client", paint_section)
+        self.assertNotIn("space-template-server", paint_section)
+        import_section = js_text.split("async function openConfigImport", 1)[1].split("const DEFAULT_PRESET_REGIONS", 1)[0]
+        self.assertIn('data-ci-tpl="client"', import_section)
+        self.assertIn('data-ci-tpl="server"', import_section)
 
         # Extract client and server template YAML from MIHOMO_TEMPLATES
         import re

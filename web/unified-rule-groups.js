@@ -22,12 +22,60 @@ nativePolicySourceLibrary=function(){
   $('#content').insertAdjacentHTML('afterbegin',nativeLibrarySubTabs());
   bindNativeLibrarySubTabs();
 };
+let nativeUnitChecks=new Set();
+window.addEventListener('hashchange',()=>nativeUnitChecks.clear());
+function pruneNativeUnitChecks(){
+  const ids=new Set(nativeUnitRows().map(p=>p.id));
+  nativeUnitChecks=new Set([...nativeUnitChecks].filter(id=>ids.has(id)));
+}
+async function batchUnitMutation(action,payload,message){
+  const ids=[...nativeUnitChecks];
+  if(!ids.length)return;
+  let done=0;
+  for(const id of ids){
+    try{await nativePolicyMutation({action,id,...payload},message)}
+    catch(error){toast(`已处理 ${done} 条后失败：${error.message}`);break}
+    done++;
+  }
+  nativeUnitChecks.clear();
+  render();
+}
+function rgOutletSelect(row,label='节点出口'){
+  return `<label class="field np-target rg-outlet-cell"><span>${label}</span><select data-rg-unit-target="${esc(row.id)}" aria-label="设置${esc(row.name)}的${label}">${nativePolicyTargets(row.target)}</select></label>`;
+}
 nativeRuleSettings=function(){
   const complete=nativeUnitRows(),all=complete.filter(p=>!p.fallback),fallback=complete.find(p=>p.fallback);
+  pruneNativeUnitChecks();
   const categories={all:'全部',direct:'直连',proxy:'代理',reject:'拦截'},canOrder=!query&&nativeRuleCategory==='all';
   const rows=all.filter(p=>(nativeRuleCategory==='all'||p.kind===nativeRuleCategory)&&(p.name+' '+p.summary).toLowerCase().includes(query.toLowerCase()));
-  $('#content').innerHTML=`${nativeLibrarySubTabs()}<div class="toolbar np-rule-toolbar"><div class="np-category" aria-label="筛选规则">${Object.entries(categories).map(([key,label])=>`<button type="button" class="button ${nativeRuleCategory===key?'active':''}" data-np-category="${key}" aria-pressed="${nativeRuleCategory===key}">${label}<span>${key==='all'?all.length:all.filter(p=>p.kind===key).length}</span></button>`).join('')}</div><label class="search">${icon('search')}<input id="native-search" aria-label="搜索规则" placeholder="搜索规则或来源" value="${esc(query)}"></label></div><p class="np-guide" role="status">${canOrder?'从上到下匹配；拖动左侧手柄排序，方向键也可调整。':'筛选中暂停排序；清空搜索并选择“全部”后可拖动。'}</p><div class="np-settings-list">${rows.map(p=>`<article class="panel np-setting-row rule-with-order ${!p.enabled?'np-disabled':''}" data-rule-row="${p.id}">${ruleOrderControl(p.id,p.name,all.indexOf(p),canOrder)}<div class="np-rule-info"><strong>${esc(p.name)}</strong><small>${esc(p.summary)}${p.mixed_enabled?' · 部分来源已停用':''}</small>${p.unavailable_rules.length?'<small class="error-message">部分规则来源已停用或缺失，请检查来源。</small>':''}</div><button class="rg-outlet-summary" data-np-edit="${p.id}" aria-label="设置${esc(p.name)}的节点出口"><span>节点出口</span><strong>${esc(p.outlet_summary)}</strong></button><div class="np-rule-actions"><button class="switch" data-np-toggle="${p.id}" role="switch" aria-label="启用${esc(p.name)}" aria-checked="${p.enabled}"></button><button class="button" data-np-edit="${p.id}" aria-label="配置${esc(p.name)}规则">配置</button>${resourceMenu(p.name,`<button data-np-copy="${p.id}">复制规则</button><button data-rule-position="${p.id}" ${canOrder?'':'disabled'}>调整位置</button><button class="danger-action" data-np-delete="${p.id}">删除规则</button>`)}</div></article>`).join('')||'<div class="empty">没有符合条件的规则，可调整筛选或添加规则。</div>'}${fallback?`<article class="panel np-setting-row rule-with-order np-fallback" data-rule-row="${fallback.id}" data-rule-fallback><span class="np-fixed" aria-label="兜底固定最后">${icon('lock')}</span><div class="np-rule-info"><strong>兜底规则</strong><small>未命中前面规则时使用；固定在最后</small></div><button class="rg-outlet-summary" data-np-edit="${fallback.id}" aria-label="设置兜底出口"><span>节点出口</span><strong>${esc(fallback.outlet_summary)}</strong></button><button class="button" data-np-edit="${fallback.id}">配置兜底</button></article>`:''}</div>`;
+  const orderCell=p=>`<div class="rule-order-control rg-unit-order"><label class="check-hit"><input type="checkbox" data-rg-unit-check="${esc(p.id)}" ${nativeUnitChecks.has(p.id)?'checked':''} aria-label="选择 ${esc(p.name)}"></label><button type="button" class="drag-handle np-handle" data-rule-handle="${esc(p.id)}" draggable="false" aria-label="移动${esc(p.name)}，上下方向键调整顺序" ${canOrder?'':'disabled'}>${actionIcon('grip')}</button><span>${all.indexOf(p)+1}</span></div>`;
+  const batchBar=nativeUnitChecks.size?`<div class="rule-batch" role="status"><span>已选 ${nativeUnitChecks.size} 条</span><button type="button" class="button" data-rg-batch="on">批量启用</button><button type="button" class="button" data-rg-batch="off">批量停用</button><label class="field np-target" style="margin:0"><span>批量换出口</span><select id="rg-batch-target">${nativePolicyTargets('')}</select></label><button type="button" class="button" id="rg-batch-apply">应用到已选</button><button type="button" class="text-button danger-action" id="rg-batch-delete">批量删除</button><button type="button" class="text-button" id="rg-batch-clear">取消选择</button></div>`:'';
+  $('#content').innerHTML=`${nativeLibrarySubTabs()}<div class="toolbar np-rule-toolbar"><div class="np-category" aria-label="筛选规则">${Object.entries(categories).map(([key,label])=>`<button type="button" class="button ${nativeRuleCategory===key?'active':''}" data-np-category="${key}" aria-pressed="${nativeRuleCategory===key}">${label}<span>${key==='all'?all.length:all.filter(p=>p.kind===key).length}</span></button>`).join('')}</div><label class="search">${icon('search')}<input id="native-search" aria-label="搜索规则" placeholder="搜索规则或来源" value="${esc(query)}"></label></div>${batchBar}<p class="np-guide" role="status">${canOrder?'从上到下匹配；拖动左侧手柄排序，方向键也可调整。勾选规则可批量启停、换出口或删除。':'筛选中暂停排序；清空搜索并选择“全部”后可拖动。'}</p><div class="np-settings-list">${rows.map(p=>`<article class="panel np-setting-row rule-with-order ${!p.enabled?'np-disabled':''}" data-rule-row="${p.id}">${orderCell(p)}<div class="np-rule-info"><strong>${esc(p.name)}</strong><small>${esc(p.summary)}${p.mixed_enabled?' · 部分来源已停用':''}</small>${p.unavailable_rules.length?'<small class="error-message">部分规则来源已停用或缺失，请检查来源。</small>':''}</div>${rgOutletSelect(p)}<div class="np-rule-actions"><button class="switch" data-np-toggle="${p.id}" role="switch" aria-label="启用${esc(p.name)}" aria-checked="${p.enabled}"></button><button class="button" data-np-edit="${p.id}" aria-label="配置${esc(p.name)}规则">配置</button>${resourceMenu(p.name,`<button data-np-copy="${p.id}">复制规则</button><button data-rule-position="${p.id}" ${canOrder?'':'disabled'}>调整位置</button><button class="danger-action" data-np-delete="${p.id}">删除规则</button>`)}</div></article>`).join('')||'<div class="empty">没有符合条件的规则，可调整筛选或添加规则。</div>'}${fallback?`<article class="panel np-setting-row rule-with-order np-fallback" data-rule-row="${fallback.id}" data-rule-fallback><span class="np-fixed" aria-label="兜底固定最后">${icon('lock')}</span><div class="np-rule-info"><strong>兜底规则</strong><small>未命中前面规则时使用；固定在最后</small></div>${rgOutletSelect(fallback,'兜底出口')}<button class="button" data-np-edit="${fallback.id}">配置兜底</button></article>`:''}</div>`;
   bindNativeSearch(nativeRuleSettings);bindNativeLibrarySubTabs();$$('[data-np-category]').forEach(b=>b.onclick=()=>{nativeRuleCategory=b.dataset.npCategory;nativeRuleSettings()});
+  $$('[data-rg-unit-target]').forEach(select=>select.onchange=async()=>{
+    try{await nativePolicyMutation({action:'unit-target',id:select.dataset.rgUnitTarget,target:select.value},'节点出口已保存。')}
+    catch(error){render();toast(error.message)}
+  });
+  $$('[data-rg-unit-check]').forEach(input=>input.onchange=()=>{
+    const id=input.dataset.rgUnitCheck;
+    if(input.checked)nativeUnitChecks.add(id);else nativeUnitChecks.delete(id);
+    nativeRuleSettings();
+    $$(`[data-rg-unit-check="${id}"]`).at(0)?.focus();
+  });
+  if($('#rg-batch-clear'))$('#rg-batch-clear').onclick=()=>{nativeUnitChecks.clear();nativeRuleSettings()};
+  $$('[data-rg-batch]').forEach(button=>button.onclick=()=>batchUnitMutation('unit-toggle',{enabled:button.dataset.rgBatch==='on'},button.dataset.rgBatch==='on'?'已批量启用。':'已批量停用。'));
+  if($('#rg-batch-apply'))$('#rg-batch-apply').onclick=()=>{
+    const target=$('#rg-batch-target').value;
+    if(target)batchUnitMutation('unit-target',{target},'已批量更换节点出口。');
+  };
+  if($('#rg-batch-delete'))$('#rg-batch-delete').onclick=()=>{
+    confirmRemoval('批量删除规则',`删除选中的 ${nativeUnitChecks.size} 条规则组；规则来源和节点保留。`,()=>{});
+    $('#remove-confirm').onclick=async e=>{
+      e.target.disabled=true;
+      try{await batchUnitMutation('unit-delete',{},'已批量删除。');$('#dialog').close()}
+      catch(error){$('#remove-error').textContent=error.message;e.target.disabled=false}
+    };
+  };
   bindNativePolicyActions();
   bindRuleOrder({ids:()=>nativeUnitRows().map(p=>p.id),save:next=>nativePolicyOrder(next),enabled:canOrder});
   $$('[data-rule-position]').forEach(button=>button.onclick=()=>showRulePosition(button.dataset.rulePosition));

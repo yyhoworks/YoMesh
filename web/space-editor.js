@@ -1169,23 +1169,30 @@ rules:
 async function openConfigImport(initialTemplate=''){
   try{await saveSpaceDrafts();await refreshSpaceCatalog()}catch(error){toast(error.message);return}
   showDialog(initialTemplate?'从 Mihomo 模板创建方案':'导入 Mihomo 配置 / 选择模板',`<form id="config-import-form">
-    <p class="scope-editor-note">${badge('独立新方案','accent')} 支持直接上传或粘贴 Mihomo (<code>.yaml</code>) 配置、配置包 (<code>.zip</code>)，也可点击下方客户端/服务端版本模板填入后自行调整再导入。</p>
+    <p class="scope-editor-note">${badge('独立新方案','accent')} 支持从模板或远程地址一键开始、直接上传或粘贴 Mihomo (<code>.yaml</code>) 配置后自行调整再导入；配置包 (<code>.zip</code>) 请使用文件上传。</p>
     <div class="preset-pill-box">
-      <div class="preset-pill-header"><span>📦 载入内置 Mihomo 配置模板（点击填入下方编辑框，已去除 PT 与个人自定义规则）：</span></div>
+      <div class="preset-pill-header"><span>📦 从模板或远程地址开始（内置模板已去除 PT 与个人自定义规则）：</span></div>
       <div class="preset-pill-list">
         <button type="button" class="preset-pill" data-ci-tpl="client">💻 客户端版本模板（TUN + Fake-IP + 地区组 + 国内外分流）</button>
         <button type="button" class="preset-pill" data-ci-tpl="server">🖥️ 服务端版本模板（TProxy + Fake-IP 28.0.0.0/8 + 旁路由网关分流）</button>
       </div>
+      <div class="fields" style="margin-top:10px">
+        <label class="field" style="flex:1">远程配置地址（http / https）<input id="ci-url" type="url" placeholder="https://example.com/mihomo.yaml" autocomplete="off"><small>拉取后填入配置内容，可先查看或修改再导入；不支持内网地址与 ZIP 配置包。</small></label>
+        <button type="button" class="button" id="ci-fetch" style="align-self:flex-end">🔗 拉取</button>
+      </div>
     </div>
     <div class="fields">
       <label class="field">方案名称<input id="ci-name" required maxlength="80" placeholder="例如：主力 Mihomo 方案" value="导入 Mihomo 配置"></label>
-      <label class="field">说明（可选）<input id="ci-description" maxlength="500" placeholder="例如：从 Mihomo YAML 导入或基于模板创建"></label>
     </div>
     <label class="field">选择 Mihomo 配置文件（.yaml / .yml / .zip / .json）<input id="ci-file" type="file" accept=".yaml,.yml,.json,.zip"></label>
-    <label class="field">或者直接粘贴 / 编辑 Mihomo 配置内容（YAML）<textarea id="ci-text" class="mono" rows="8" spellcheck="false" placeholder="粘贴 Mihomo config.yaml 内容，或点击上方「💻 客户端版本模板 / 🖥️ 服务端版本模板」…"></textarea></label>
+    <details class="advanced-options" id="ci-editor-details">
+      <summary>配置内容（YAML）· 模板 / 拉取 / 上传后可展开编辑</summary>
+      <label class="field" style="margin-top:10px">或者直接粘贴 / 编辑 Mihomo 配置内容<textarea id="ci-text" class="mono" rows="8" spellcheck="false" placeholder="粘贴 Mihomo config.yaml 内容，或点击上方模板 / 拉取远程配置…"></textarea></label>
+    </details>
     <details class="advanced-options">
-      <summary>高级导入选项（模式与 LocalDNS 附加）</summary>
-      <label class="field" style="margin-top:10px">空间类型<select id="ci-mode">
+      <summary>高级选项（说明、空间类型与 LocalDNS 附加）</summary>
+      <label class="field" style="margin-top:10px">说明（可选）<input id="ci-description" maxlength="500" placeholder="例如：从 Mihomo YAML 导入或基于模板创建"></label>
+      <label class="field">空间类型<select id="ci-mode">
         <option value="auto">自动识别（推荐：保留 proxy-providers / rule-providers 原生结构）</option>
         <option value="native">Mihomo 原生空间（100% 原样保留 proxy-providers / rule-providers）</option>
         <option value="portable">通用标准空间（支持同时导出 Mihomo YAML 与 sing-box JSON）</option>
@@ -1206,6 +1213,7 @@ async function openConfigImport(initialTemplate=''){
     $('#ci-description').value=tpl.desc;
     $('#ci-text').value=tpl.yaml;
     $('#ci-file').value='';
+    $('#ci-editor-details').open=true;
   };
   $$('[data-ci-tpl]').forEach(btn=>btn.onclick=()=>{
     applyTpl(btn.dataset.ciTpl);
@@ -1217,6 +1225,21 @@ async function openConfigImport(initialTemplate=''){
     if(f&&($('#ci-name').value==='导入 Mihomo 配置'||!$('#ci-name').value.trim())){
       $('#ci-name').value=f.name.replace(/\.(yaml|yml|json|zip)$/i,'')||'导入 Mihomo 配置';
     }
+  };
+  $('#ci-fetch').onclick=async()=>{
+    const url=$('#ci-url').value.trim(),btn=$('#ci-fetch');
+    if(!url){$('#ci-error').textContent='请先输入远程配置地址。';return}
+    btn.disabled=true;const original=btn.textContent;btn.textContent='正在拉取…';$('#ci-error').textContent='';
+    try{
+      const result=await api('/api/spaces/fetch-config',{url},spaceId,30000);
+      $('#ci-text').value=result.text;$('#ci-file').value='';
+      $('#ci-editor-details').open=true;
+      if($('#ci-name').value==='导入 Mihomo 配置'||!$('#ci-name').value.trim()){
+        $('#ci-name').value=String(result.filename||'').replace(/\.(yaml|yml|json)$/i,'')||'导入 Mihomo 配置';
+      }
+      toast('远程配置已拉取，可先修改再点击「导入并创建方案」。');
+    }catch(error){$('#ci-error').textContent=error.message}
+    finally{btn.disabled=false;btn.textContent=original}
   };
   $('#ci-cancel').onclick=()=>$('#dialog').close();
   $('#config-import-form').onsubmit=async e=>{
@@ -1259,7 +1282,8 @@ async function openConfigImport(initialTemplate=''){
       $('#dialog').close();
       await switchSpace(result.id);
       const summary=result.import_summary;
-      toast(summary?`已导入「${summary.format}」配置（${summary.nodes||0} 节点 / ${summary.groups||0} 节点组）`:'配置已导入到新方案。');
+      toast(summary?`已导入「${summary.format}」配置（${summary.nodes||0} 节点 / ${summary.groups||0} 节点组），可直接调整规则。`:'配置已导入到新方案。');
+      location.hash='library';
     }catch(error){
       $('#ci-error').textContent=error.message;
       btn.disabled=false;
@@ -1281,7 +1305,14 @@ const DEFAULT_PRESET_RULES=[
   {key:'github',name:'GitHub 开发者',pill:'🐙 GitHub',desc:'🐙 GitHub 开发者 → 🚀 默认代理',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/github.yaml',ip_url:'',default_region:'proxy'},
   {key:'apple',name:'Apple 苹果服务',pill:'🍎 Apple 服务',desc:'🍎 Apple / 微软服务 → DIRECT 直连',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/apple.yaml',ip_url:'',default_region:'direct'},
   {key:'cn',name:'国内域名与局域网直连',pill:'🏠 国内域名+IP直连',desc:'🏠 国内域名 & 局域网 IP → DIRECT 直连',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/cn.yaml',ip_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/cn.yaml',default_region:'direct'},
-  {key:'adblock',name:'广告与追踪拦截',pill:'🛡️ 广告拦截',desc:'🛡️ 广告拦截 → REJECT',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-ads-all.yaml',ip_url:'',default_region:'reject'}
+  {key:'adblock',name:'广告与追踪拦截',pill:'🛡️ 广告拦截',desc:'🛡️ 广告拦截 → REJECT',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-ads-all.yaml',ip_url:'',default_region:'reject'},
+  {key:'steam',name:'Steam 游戏平台',pill:'🎮 Steam',desc:'🎮 Steam 商店 / 社区 → 🚀 默认代理',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/steam.yaml',ip_url:'',default_region:'proxy'},
+  {key:'epicgames',name:'Epic Games 商店',pill:'🎮 EpicGames',desc:'🎮 Epic Games → DIRECT 直连（可自行换代理）',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/epicgames.yaml',ip_url:'',default_region:'direct'},
+  {key:'spotify',name:'Spotify 音乐',pill:'🎧 Spotify',desc:'🎧 Spotify 音乐 → 🇭🇰 香港节点',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/spotify.yaml',ip_url:'',default_region:'hk'},
+  {key:'docker',name:'Docker 容器服务',pill:'🐳 Docker',desc:'🐳 Docker 镜像与仓库 → 🇺🇸 美国节点',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/docker.yaml',ip_url:'',default_region:'us'},
+  {key:'microsoft',name:'微软服务',pill:'🪟 Microsoft',desc:'🪟 微软服务 → 🚀 默认代理（国内 CDN 可改直连）',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/microsoft.yaml',ip_url:'',default_region:'proxy'},
+  {key:'themoviedb',name:'TheMovieDb 影视信息',pill:'🍿 TheMovieDb',desc:'🍿 TheMovieDb → 🇭🇰 香港节点',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/themoviedb.yaml',ip_url:'',default_region:'hk'},
+  {key:'twitter',name:'Twitter / X 社交',pill:'🐦 Twitter/X',desc:'🐦 Twitter / X → 🇭🇰 香港节点',domain_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/twitter.yaml',ip_url:'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/twitter.yaml',default_region:'hk'}
 ];
 let spacePresetsCache={regions:DEFAULT_PRESET_REGIONS,rules:DEFAULT_PRESET_RULES,controllers:{},links_by_space:{}};
 let spacePresetsLoadedOnce=false,spacePresetsError='',spacePresetsInFlight=null;
@@ -1498,22 +1529,20 @@ function paintSpaceCards(){
   const onboard=!facts.subs||!facts.groups||!facts.rules;
   const stepClass=(done,active)=>done?'onboard-step done':active?'onboard-step active':'onboard-step';
   const onboardPrimary=!facts.subs?['add-sub','添加节点订阅']:!facts.groups?['quick-group','按地区快速建组']:['goto-rules','去配置规则'];
-  const banner=onboard?`<div class="configuration-overview onboard-overview"><div><h2>开始使用 · 三步完成首次配置</h2><p>按顺序完成三步；每一步都保存到服务端，可随时回来调整。已有 Mihomo 配置也可以直接导入。</p><div class="onboard-steps"><span class="${stepClass(facts.subs>0,!facts.subs)}"><i>${facts.subs>0?'✓':'1'}</i>添加节点订阅</span><span class="onboard-arrow" aria-hidden="true">→</span><span class="${stepClass(facts.groups>0,facts.subs>0&&!facts.groups)}"><i>${facts.groups>0?'✓':'2'}</i>建地区节点组</span><span class="onboard-arrow" aria-hidden="true">→</span><span class="${stepClass(facts.rules>0,facts.subs>0&&facts.groups>0&&!facts.rules)}"><i>${facts.rules>0?'✓':'3'}</i>配置规则并导出</span></div><div class="filter-row" style="margin-top:10px;flex-wrap:wrap"><button type="button" class="button primary" data-onboard-primary="${onboardPrimary[0]}">${onboardPrimary[1]}</button><button type="button" class="button" id="onboard-help">快速上手指南</button><span class="onboard-alt">已有 Mihomo 配置？<button type="button" class="text-button" id="onboard-import">导入配置</button><button type="button" class="text-button" id="onboard-template">从模板新建</button></span></div></div></div>`:`<div class="configuration-overview"><div><h2>Mihomo 配置导入、模板与导出</h2><p>支持直接导入现有 Mihomo YAML 配置，或选用内置的<strong>客户端版本模板</strong> / <strong>服务端版本模板</strong>（已去除 PT 与个人自定义规则）新建配置空间；随时一键导出 <code>mihomo.yaml</code> 或复制持久订阅链接。</p><div class="filter-row" style="margin-top:10px;flex-wrap:wrap"><button type="button" class="button primary" id="space-import-config">📥 导入 Mihomo 配置</button><button type="button" class="button" id="space-template-client">💻 从客户端模板新建</button><button type="button" class="button" id="space-template-server">🖥️ 从服务端模板新建</button><button type="button" class="button" id="space-export-current">📤 导出当前 Mihomo 配置</button><button type="button" class="button" id="space-open-subscription">高级订阅链接设置</button></div></div></div>`;
+  const banner=onboard?`<div class="configuration-overview onboard-overview"><div><h2>开始使用 · 三步完成首次配置</h2><p>按顺序完成三步；每一步都保存到服务端，可随时回来调整。已有 Mihomo 配置也可以直接导入。</p><div class="onboard-steps"><span class="${stepClass(facts.subs>0,!facts.subs)}"><i>${facts.subs>0?'✓':'1'}</i>添加节点订阅</span><span class="onboard-arrow" aria-hidden="true">→</span><span class="${stepClass(facts.groups>0,facts.subs>0&&!facts.groups)}"><i>${facts.groups>0?'✓':'2'}</i>建地区节点组</span><span class="onboard-arrow" aria-hidden="true">→</span><span class="${stepClass(facts.rules>0,facts.subs>0&&facts.groups>0&&!facts.rules)}"><i>${facts.rules>0?'✓':'3'}</i>配置规则并导出</span></div><div class="filter-row" style="margin-top:10px;flex-wrap:wrap"><button type="button" class="button primary" data-onboard-primary="${onboardPrimary[0]}">${onboardPrimary[1]}</button><button type="button" class="button" id="onboard-help">快速上手指南</button><span class="onboard-alt">已有 Mihomo 配置？<button type="button" class="text-button" id="onboard-import">导入配置</button><button type="button" class="text-button" id="onboard-template">从模板新建</button></span></div></div></div>`:`<div class="configuration-overview"><div><h2>Mihomo 配置导入、模板与导出</h2><p>从客户端/服务端模板或远程地址一键新建，导入现有 Mihomo YAML，或导出当前配置 / 复制订阅链接；模板选择在导入对话框内完成。</p><div class="filter-row" style="margin-top:10px;flex-wrap:wrap"><button type="button" class="button primary" id="space-import-config">📥 导入 / 新建配置</button><button type="button" class="button" id="space-export-current">📤 导出当前 Mihomo 配置</button><button type="button" class="button" id="space-open-subscription">订阅链接</button></div></div></div>`;
   $('#content').innerHTML=`${banner}<div id="space-list-status" class="error-message" role="status"></div><div class="space-grid">${entries.map(s=>{
     const current=s.id===spaceId,counts=s.counts||{},g=s.generation||{},issues=g.excluded_policies?.length||0;
-    const savedLink=(spacePresetsCache.links_by_space?.[s.id]||[]).at(-1);
-    const linkPreview=savedLink?.url||`${location.origin}/s/<点击右侧按钮一键生成并复制>/${s.proxy==='sing-box'&&!s.native?'sing-box.json':'mihomo.yaml'}`;
     const ctrl=spacePresetsCache.controllers?.[s.id];
     const ctrlConnected=ctrl?.enabled&&ctrl?.url;
+    const currentMenu=`<button data-space-copy-sub="${esc(s.id)}">📋 复制订阅链接</button>${ctrlConnected?`<button data-space-reload-now="${esc(s.id)}">🔄 立即热重载</button><button data-space-controller="${esc(s.id)}">修改客户端控制器</button>`:`<button data-space-controller="${esc(s.id)}">🔄 绑定客户端控制器</button>`}<button data-space-edit="${esc(s.id)}">修改名称与说明</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" disabled>${s.id==='default'?'默认方案保留':'切换后可删除'}</button>`;
+    const otherMenu=`<button data-space-copy-sub="${esc(s.id)}">📋 复制订阅链接</button><button data-space-export="${esc(s.id)}">切换并导出 Mihomo 配置</button><button data-space-edit="${esc(s.id)}">改名 / 说明</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" ${s.id==='default'?'disabled':''}>${s.id==='default'?'默认方案保留':'删除此方案'}</button>`;
     const actions=current
-      ?`<button class="button primary" data-space-configure="${esc(s.id)}">去配置规则</button><button class="button" data-space-export="${esc(s.id)}">${actionIcon('download')}导出 Mihomo 配置</button><button class="button" data-space-subscription="${esc(s.id)}">链接高级设置</button>${resourceMenu(s.name,`<button data-space-edit="${esc(s.id)}">${s.native?'修改名称与说明':'编辑方案选用'}</button><button data-space-copy="${esc(s.id)}">复制为新方案</button><button class="danger-action" data-space-delete="${esc(s.id)}" disabled>${s.id==='default'?'默认方案保留':'切换后可删除'}</button>`)}`
-      :`<button class="button primary" data-space-use="${esc(s.id)}">切换到此方案</button><button class="button" data-space-edit="${esc(s.id)}">${s.native?'改名 / 说明':'编辑选用'}</button><button class="button" data-space-copy="${esc(s.id)}">复制为新方案</button>${resourceMenu(s.name,`<button data-space-subscription="${esc(s.id)}">切换并查看订阅链接</button><button data-space-export="${esc(s.id)}">切换并导出 Mihomo 配置</button><button class="danger-action" data-space-delete="${esc(s.id)}" ${s.id==='default'?'disabled':''}>${s.id==='default'?'默认方案保留':'删除此方案'}</button>`)}`;
-    return `<article class="panel space-card ${current?'selected':''}" aria-label="${esc(s.name)}配置空间"><div class="space-card-heading"><div><h2>${esc(s.name)}</h2><p>${s.native?'Mihomo YAML':s.proxy==='sing-box'?'sing-box JSON':'Mihomo YAML'} · ${s.native?'原生引用与缓存':{inline:'内联规则',local:'本地文件引用',remote:'远程订阅引用'}[s.rule_output]||'内联规则'}</p></div>${current?badge('当前使用中','accent'):badge('未激活')}</div><p class="space-description">${esc(s.description||'节点组 + 规则 + 分流策略的生成方案')}</p><div class="space-counts"><span><b>${counts.groups||0}</b> 节点组</span><span><b>${counts.library||0}</b> 规则</span><span><b>${counts.policies||0}</b> 策略</span></div><div class="space-inline-sub-box"><div class="space-inline-sub-label"><span>🔗 专属持久订阅链接（填入客户端 / LocalDNS 自动拉取更新）</span></div><div class="space-inline-sub-row"><input type="text" class="mono" readonly value="${esc(linkPreview)}" aria-label="${esc(s.name)}订阅链接"><button type="button" class="button primary" data-space-copy-sub="${esc(s.id)}">📋 直接复制</button></div></div><div class="space-inline-ctrl-bar"><div class="space-inline-ctrl-info"><span>🔄 客户端自动重载：</span>${ctrlConnected?`<strong style="color:#34d399">● 已绑定 (${esc(ctrl.url)}) · 改规则 0 秒热重载</strong>`:`<span>未绑定（可选填 Mihomo Controller，改规则自动热重载）</span>`}</div><div class="filter-row" style="gap:8px">${ctrlConnected?`<button type="button" class="text-button" data-space-reload-now="${esc(s.id)}">立即重载</button>`:''}<button type="button" class="text-button" data-space-controller="${esc(s.id)}">${ctrlConnected?'修改控制器':'绑定客户端控制器'}</button></div></div><p class="space-readiness ${g.error?'error-message':'generation-ready'}">${g.error?esc(g.error):g.valid?'代理选用检查通过':'等待代理检查'}${issues?` · 跳过 ${issues} 条策略`:''}</p><div class="space-card-actions">${actions}</div></article>`;
+      ?`<button class="button primary" data-space-configure="${esc(s.id)}">去配置规则</button><button class="button" data-space-export="${esc(s.id)}">${actionIcon('download')}导出</button>${resourceMenu(s.name,currentMenu)}`
+      :`<button class="button primary" data-space-use="${esc(s.id)}">切换到此方案</button><button class="button" data-space-copy="${esc(s.id)}">复制为新方案</button>${resourceMenu(s.name,otherMenu)}`;
+    return `<article class="panel space-card ${current?'selected':''}" aria-label="${esc(s.name)}配置空间"><div class="space-card-heading"><div><h2>${esc(s.name)}</h2><p>${s.native?'Mihomo YAML':s.proxy==='sing-box'?'sing-box JSON':'Mihomo YAML'} · ${s.native?'原生引用与缓存':{inline:'内联规则',local:'本地文件引用',remote:'远程订阅引用'}[s.rule_output]||'内联规则'}</p></div>${current?badge('当前使用中','accent'):badge('未激活')}</div><p class="space-description">${esc(s.description||'节点组 + 规则 + 分流策略的生成方案')}</p><div class="space-counts"><span><b>${counts.groups||0}</b> 节点组</span><span><b>${counts.library||0}</b> 规则</span><span><b>${counts.policies||0}</b> 策略</span></div><p class="space-delivery-note">${(spacePresetsCache.links_by_space?.[s.id]||[]).length?'🔗 订阅链接已生成':'🔗 订阅链接未生成'} · ${ctrlConnected?'<strong style="color:#34d399">● 热重载已绑定</strong>':'热重载未绑定'}（入口在「更多」）</p><p class="space-readiness ${g.error?'error-message':'generation-ready'}">${g.error?esc(g.error):g.valid?'代理选用检查通过':'等待代理检查'}${issues?` · 跳过 ${issues} 条策略`:''}</p><div class="space-card-actions">${actions}</div></article>`;
   }).join('')}</div><p class="preview-note">“当前使用中”表示左侧导航正在编辑该方案。切换方案或导出前都会自动执行原生内核校验。</p>`;
   paintSpacePresetsStatus();
   if($('#space-import-config'))$('#space-import-config').onclick=()=>openConfigImport();
-  if($('#space-template-client'))$('#space-template-client').onclick=()=>openConfigImport('client');
-  if($('#space-template-server'))$('#space-template-server').onclick=()=>openConfigImport('server');
   if($('#space-export-current'))$('#space-export-current').onclick=()=>openConfigurationExport('proxy');
   if($('#space-open-subscription'))$('#space-open-subscription').onclick=openSubscriptionLink;
   $$('[data-onboard-primary]').forEach(b=>b.onclick=()=>{const action=b.dataset.onboardPrimary;if(action==='add-sub')location.hash='sources';else if(action==='quick-group')quickCreateRegionGroup('HK');else location.hash='library'});

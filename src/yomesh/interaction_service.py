@@ -9,7 +9,7 @@ import time
 from urllib.parse import quote, urlencode, urlsplit
 
 from .model import ConfigError, Profile
-from .interaction_tools import node_catalog, native_core, preview_group, group_filter_view, diagnose, prepare_import, repair_reference
+from .interaction_tools import node_catalog, native_core, preview_group, group_filter_view, group_overview, diagnose, prepare_import, repair_reference
 from .interaction_inspection import scan_rule_entries
 from .interaction_probe import measure_node, record_probe_result
 from .native import validate_bundle
@@ -36,9 +36,11 @@ class InteractionService:
         native = snapshot["profile"].get("native_configuration")
         if not native:
             raise ConfigError("请在原生配置空间使用此工具；普通空间继续使用原有编辑器")
-        if action in {"nodes", "diagnose", "resources", "group-filters"}:
+        if action in {"nodes", "diagnose", "resources", "group-filters", "group-overview"}:
             if action == "group-filters":
                 return group_filter_view(request.get("group"))
+            if action == "group-overview":
+                return group_overview(self.root, native)
             if action == "nodes":
                 return {"nodes": node_catalog(native), "statuses": snapshot.get("node_status", {}), "job": snapshot.get("group_status", {}).get("native_nodes", {})}
             if action == "resources":

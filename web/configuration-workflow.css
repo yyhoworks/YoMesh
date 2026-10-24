@@ -1,5 +1,7 @@
 .rule-with-order {
-  grid-template-columns: 48px minmax(0, 1fr) minmax(170px, 250px) auto;
+  grid-template-columns:
+    minmax(64px, auto) minmax(0, 1fr) minmax(170px, 250px)
+    auto;
   gap: 16px;
 }
 .rule-order-control {
@@ -10,6 +12,15 @@
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+.rg-unit-order {
+  gap: 8px;
+}
+.rg-outlet-cell {
+  align-items: start;
+}
+.rg-outlet-cell select {
+  width: 100%;
 }
 .rule-order-control .np-handle {
   min-width: 26px;

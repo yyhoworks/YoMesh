@@ -64,6 +64,13 @@
 .flat-group-card.chosen {
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
+.flat-group-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 .group-node-count {
   margin: 22px 0 16px;
   display: flex;
@@ -412,6 +419,14 @@
   display: block;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+}
+.space-delivery-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+.space-delivery-note strong {
+  font-weight: 500;
 }
 .space-readiness {
   font-size: 12px;
