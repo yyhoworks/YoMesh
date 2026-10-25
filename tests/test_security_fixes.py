@@ -30,21 +30,20 @@ from helpers import fetched_fixture
 
 
 class AuthenticationFixes(unittest.TestCase):
-    def test_bootstrap_requires_explicit_long_password_and_preserves_existing_account(self):
+    def test_bootstrap_requires_explicit_password_and_preserves_existing_account(self):
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"YOMESH_REQUIRE_AUTH": "1", "YOMESH_INIT_PASSWORD": ""}):
             root = Path(temporary)
-            for password in ("", "admin123"):
-                with self.subTest(password_length=len(password)), patch.dict(os.environ, {"YOMESH_INIT_PASSWORD": password}):
-                    with self.assertRaises(ConfigError):
-                        AuthStore(root)
-                    self.assertFalse((root / "data/auth.json").exists())
+            # 密码长度不再限制，但必须显式提供非空初始密码。
+            with self.assertRaises(ConfigError):
+                AuthStore(root)
+            self.assertFalse((root / "data/auth.json").exists())
             with patch.dict(os.environ, {"YOMESH_INIT_PASSWORD": "synthetic-valid-password"}):
                 store = AuthStore(root)
                 self.assertTrue(store.login("admin", "synthetic-valid-password"))
             self.assertTrue(AuthStore(root).is_enabled())
             before = (root / "data/auth.json").read_bytes()
             with self.assertRaises(ConfigError):
-                store.update_credentials("synthetic-valid-password", "admin", "1234")
+                store.update_credentials("synthetic-valid-password", "admin", "")
             self.assertEqual(before, (root / "data/auth.json").read_bytes())
 
     def test_credential_replace_failure_preserves_old_login_and_removes_temporary_file(self):

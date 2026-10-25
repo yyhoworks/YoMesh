@@ -19,7 +19,7 @@ from .model import ConfigError
 SESSION_COOKIE = "yomesh_session"
 SESSION_TTL_SECONDS = 30 * 24 * 3600
 PBKDF2_ITERATIONS = 200_000
-MIN_PASSWORD_LENGTH = 12
+MIN_PASSWORD_LENGTH = 1
 
 
 class AuthUnavailable(OSError):
@@ -54,7 +54,7 @@ class AuthStore:
             user = os.environ.get("YOMESH_INIT_USER", "admin").strip() or "admin"
             password = os.environ.get("YOMESH_INIT_PASSWORD", "")
             if len(password) < MIN_PASSWORD_LENGTH:
-                raise ConfigError("启用登录必须显式设置 YOMESH_INIT_PASSWORD，至少 12 个字符；未创建默认账号")
+                raise ConfigError("启用登录必须显式设置 YOMESH_INIT_PASSWORD；未创建默认账号")
             self._write_credentials(user, password, enabled=True)
 
     def _read(self) -> dict:
@@ -190,7 +190,7 @@ class AuthStore:
         if not 1 <= len(user) <= 32:
             raise ConfigError("用户名长度需在 1 至 32 个字符之间")
         if not new_password or len(new_password) < MIN_PASSWORD_LENGTH:
-            raise ConfigError("新密码长度至少需要 12 个字符")
+            raise ConfigError("请输入新密码")
         with self._lock:
             data = self._read()
             if data.get("enabled"):

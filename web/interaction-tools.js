@@ -224,7 +224,7 @@ nativeRenderProviders=function(section){renderProvidersBeforeSharing(section);co
         ${status.enabled?'<label class="field">当前密码<input id="auth-cur-pass" type="password" autocomplete="current-password" placeholder="验证当前密码" required></label>':''}
         <div class="fields">
           <label class="field">登录用户名<input id="auth-new-user" autocomplete="username" value="${esc(status.username||'admin')}" maxlength="32" required></label>
-          <label class="field">${status.enabled?'新密码（至少 12 位）':'设置登录密码（至少 12 位）'}<input id="auth-new-pass" type="password" autocomplete="new-password" minlength="12" placeholder="输入新密码" required></label>
+          <label class="field">${status.enabled?'新密码':'设置登录密码'}<input id="auth-new-pass" type="password" autocomplete="new-password" placeholder="输入新密码" required></label>
         </div>
         <p class="error-message" id="auth-settings-error" role="alert"></p>
         <div class="dialog-actions" style="justify-content:space-between;flex-wrap:wrap">
